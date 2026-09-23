@@ -23,6 +23,22 @@ else()
     target_compile_options(iphox_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_executable(IphoxCore
+    app/IphoxCore/main.cpp
+)
+target_link_libraries(IphoxCore PRIVATE iphox_core)
+
+add_executable(IphoxAI WIN32
+    app/IphoxAI/main.cpp
+)
+target_link_libraries(IphoxAI PRIVATE
+    iphox_core
+    d2d1
+    dwrite
+    shell32
+    user32
+)
+
 add_executable(iphox_core_tests
     tests/cognitive_tests.cpp
 )
