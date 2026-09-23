@@ -15,6 +15,7 @@
 #include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
+#include "iphox/runtime/RuntimeConfig.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -873,6 +874,52 @@ void TestCoreServiceCompletedChatPath() {
         "echo:ciao");
 }
 
+
+void TestRuntimeConfigDefaultsAndValidation() {
+    const auto defaults =
+        iphox::runtime::RuntimeConfigLoader::Parse("");
+
+    assert(defaults.valid);
+    assert(
+        defaults.config.llama.host ==
+        L"127.0.0.1");
+    assert(defaults.config.llama.port == 8080);
+
+    const auto configured =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "runtime.host=localhost\n"
+            "runtime.port=18080\n"
+            "runtime.n_predict=768\n"
+            "runtime.connect_timeout_ms=2500\n");
+
+    assert(configured.valid);
+    assert(
+        configured.config.llama.host ==
+        L"localhost");
+    assert(
+        configured.config.llama.port ==
+        18080);
+    assert(
+        configured.config.llama.nPredict ==
+        768);
+    assert(
+        configured.config.llama.connectTimeoutMs ==
+        2500);
+
+    const auto remote =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "runtime.host=192.168.1.10\n");
+
+    assert(!remote.valid);
+
+    const auto duplicate =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "runtime.port=8080\n"
+            "runtime.port=8081\n");
+
+    assert(!duplicate.valid);
+}
+
 } // namespace
 
 int main() {
@@ -899,6 +946,7 @@ int main() {
     TestJsonLite();
     TestLlamaHostRestriction();
     TestCoreServiceCompletedChatPath();
+    TestRuntimeConfigDefaultsAndValidation();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
