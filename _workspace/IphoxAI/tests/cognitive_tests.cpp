@@ -9,6 +9,8 @@
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
 #include "iphox/foundation/Sha256.hpp"
+#include "iphox/foundation/JsonLite.hpp"
+#include "iphox/generation/LlamaCppHttpEngine.hpp"
 #include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
@@ -759,6 +761,118 @@ void TestSha256KnownVector() {
         "b00361a396177a9cb410ff61f20015ad");
 }
 
+
+class EchoGenerativeEngine final
+    : public iphox::generation::IGenerativeEngine {
+
+public:
+    iphox::generation::GenerationResult Generate(
+        const iphox::generation::GenerationRequest& request,
+        std::stop_token stopToken) override {
+
+        if (stopToken.stop_requested()) {
+            return {
+                .status = iphox::generation::GenerationStatus::Cancelled,
+                .text = {},
+                .errorCode = "CANCELLED"
+            };
+        }
+
+        return {
+            .status = iphox::generation::GenerationStatus::Completed,
+            .text = "echo:" + request.prompt,
+            .errorCode = {}
+        };
+    }
+};
+
+void TestJsonLite() {
+    const std::string raw =
+        "quote=\" slash=\\ newline=\n";
+
+    const auto escaped =
+        iphox::foundation::JsonEscape(raw);
+
+    const auto json =
+        std::string{"{\"content\":\""} +
+        escaped +
+        "\"}";
+
+    const auto parsed =
+        iphox::foundation::JsonStringField(
+            json,
+            "content");
+
+    assert(parsed.has_value());
+    assert(*parsed == raw);
+
+    const auto unicode =
+        iphox::foundation::JsonStringField(
+            "{\"content\":\"\\u20ac \\ud83d\\udc4b\"}",
+            "content");
+
+    assert(unicode.has_value());
+    assert(*unicode == "â¬ ð");
+}
+
+void TestLlamaHostRestriction() {
+    assert(
+        iphox::generation::LlamaCppHttpEngine::IsLoopbackHost(
+            L"127.0.0.1"));
+
+    assert(
+        iphox::generation::LlamaCppHttpEngine::IsLoopbackHost(
+            L"localhost"));
+
+    assert(
+        iphox::generation::LlamaCppHttpEngine::IsLoopbackHost(
+            L"::1"));
+
+    assert(
+        !iphox::generation::LlamaCppHttpEngine::IsLoopbackHost(
+            L"192.168.1.20"));
+
+    assert(
+        !iphox::generation::LlamaCppHttpEngine::IsLoopbackHost(
+            L"example.com"));
+}
+
+void TestCoreServiceCompletedChatPath() {
+    EchoGenerativeEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        8
+    };
+
+    iphox::ipc::Frame chat;
+    chat.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    chat.header.requestId = 980;
+    chat.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "ciao"});
+
+    const auto result =
+        service.Handle(chat);
+
+    assert(
+        result.response.header.type ==
+        iphox::ipc::MessageType::ChatStatus);
+
+    assert(
+        (result.response.header.flags &
+            iphox::ipc::kFlagError) == 0);
+
+    assert(
+        iphox::ipc::FromPayload(
+            result.response.payload) ==
+        "echo:ciao");
+}
+
 } // namespace
 
 int main() {
@@ -782,6 +896,9 @@ int main() {
     TestCoreServiceDecisionEvaluate();
     TestCoreServiceRejectsMalformedDecisionPayload();
     TestSha256KnownVector();
+    TestJsonLite();
+    TestLlamaHostRestriction();
+    TestCoreServiceCompletedChatPath();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
