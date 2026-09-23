@@ -1,14 +1,12 @@
 #include "iphox/runtime/RuntimeConfig.hpp"
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include "iphox/foundation/TextEncoding.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <cctype>
 #include <fstream>
 #include <limits>
-#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -106,46 +104,6 @@ bool ParseInt(
     return true;
 }
 
-std::optional<std::wstring> Utf8ToWide(
-    const std::string& text) {
-
-    if (text.empty()) {
-        return std::wstring{};
-    }
-
-    const int required =
-        MultiByteToWideChar(
-            CP_UTF8,
-            MB_ERR_INVALID_CHARS,
-            text.data(),
-            static_cast<int>(
-                text.size()),
-            nullptr,
-            0);
-
-    if (required <= 0) {
-        return std::nullopt;
-    }
-
-    std::wstring output(
-        static_cast<std::size_t>(
-            required),
-        L'\0');
-
-    if (MultiByteToWideChar(
-            CP_UTF8,
-            MB_ERR_INVALID_CHARS,
-            text.data(),
-            static_cast<int>(
-                text.size()),
-            output.data(),
-            required) != required) {
-        return std::nullopt;
-    }
-
-    return output;
-}
-
 void Issue(
     RuntimeConfigResult& result,
     std::size_t line,
@@ -225,7 +183,7 @@ RuntimeConfigResult RuntimeConfigLoader::Parse(
 
         if (key == "runtime.host") {
             const auto wide =
-                Utf8ToWide(value);
+                foundation::Utf8ToWide(value);
 
             if (!wide.has_value() ||
                 wide->empty() ||
