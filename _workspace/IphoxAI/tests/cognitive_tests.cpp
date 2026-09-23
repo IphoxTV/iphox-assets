@@ -1,4 +1,5 @@
 #include "iphox/capability/CapabilityAuthority.hpp"
+#include "iphox/chat/ChatCodec.hpp"
 #include "iphox/cognitive/BaselineDecisionBackend.hpp"
 #include "iphox/cognitive/DecisionValidator.hpp"
 #include "iphox/cognitive/StateProjection.hpp"
@@ -6,6 +7,7 @@
 #include "iphox/core/CoreService.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
+#include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
@@ -471,7 +473,8 @@ void TestProtocolRejectsMalformedFrames() {
 }
 
 void TestCoreServiceFailClosedAndIdempotent() {
-    iphox::core::CoreService service{8};
+    iphox::generation::UnavailableGenerativeEngine engine;
+    iphox::core::CoreService service{engine, 8};
 
     iphox::ipc::Frame ping;
     ping.header.type =
@@ -519,7 +522,8 @@ void TestCoreServiceFailClosedAndIdempotent() {
         iphox::ipc::MessageType::ChatSubmit;
     chat.header.requestId = 701;
     chat.payload =
-        iphox::ipc::ToPayload("hello");
+        iphox::chat::ChatCodec::Encode(
+            {.text = "hello"});
 
     const auto chatResult =
         service.Handle(chat);
@@ -539,7 +543,8 @@ void TestCoreServiceFailClosedAndIdempotent() {
 }
 
 void TestCoreServiceRejectsResponseAsRequest() {
-    iphox::core::CoreService service{8};
+    iphox::generation::UnavailableGenerativeEngine engine;
+    iphox::core::CoreService service{engine, 8};
 
     iphox::ipc::Frame invalid;
     invalid.header.type =
@@ -561,6 +566,59 @@ void TestCoreServiceRejectsResponseAsRequest() {
         "REQUEST_MARKED_AS_RESPONSE");
 }
 
+
+void TestChatCodecRoundTripAndValidation() {
+    const iphox::chat::ChatSubmit input{
+        .text = "ciao ð"
+    };
+
+    const auto encoded =
+        iphox::chat::ChatCodec::Encode(input);
+
+    const auto decoded =
+        iphox::chat::ChatCodec::Decode(encoded);
+
+    assert(decoded.ok());
+    assert(decoded.value.text == input.text);
+
+    auto broken = encoded;
+    broken.back() = std::byte{0xFF};
+
+    const auto invalid =
+        iphox::chat::ChatCodec::Decode(broken);
+
+    assert(
+        invalid.status ==
+        iphox::chat::ChatCodecStatus::InvalidUtf8);
+}
+
+void TestChatSubmitRejectsMalformedPayload() {
+    iphox::generation::UnavailableGenerativeEngine engine;
+    iphox::core::CoreService service{engine, 8};
+
+    iphox::ipc::Frame chat;
+    chat.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    chat.header.requestId = 900;
+    chat.payload = {
+        std::byte{'b'},
+        std::byte{'a'},
+        std::byte{'d'}
+    };
+
+    const auto result =
+        service.Handle(chat);
+
+    assert(
+        result.response.header.type ==
+        iphox::ipc::MessageType::Error);
+
+    assert(
+        iphox::ipc::FromPayload(
+            result.response.payload) ==
+        "INVALID_CHAT_PAYLOAD");
+}
+
 } // namespace
 
 int main() {
@@ -578,6 +636,8 @@ int main() {
     TestProtocolRejectsMalformedFrames();
     TestCoreServiceFailClosedAndIdempotent();
     TestCoreServiceRejectsResponseAsRequest();
+    TestChatCodecRoundTripAndValidation();
+    TestChatSubmitRejectsMalformedPayload();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
