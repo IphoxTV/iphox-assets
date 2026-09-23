@@ -1,11 +1,13 @@
+#define UNICODE
+#define _UNICODE
 #define WIN32_LEAN_AND_MEAN
+
 #include <windows.h>
 #include <shellapi.h>
 #include <d2d1.h>
 #include <dwrite.h>
 
 #include <algorithm>
-#include <string>
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
@@ -159,7 +161,6 @@ private:
         switch (message) {
         case WM_PAINT:
             Paint();
-            ValidateRect(hwnd_, nullptr);
             return 0;
 
         case WM_SIZE:
@@ -188,7 +189,6 @@ private:
         }
 
         case WM_CLOSE:
-            // Historical IphoxAI behavior: X hides to tray.
             ShowWindow(hwnd_, SW_HIDE);
             return 0;
 
@@ -295,7 +295,7 @@ private:
             const wchar_t status[] =
                 L"Native C++ recovery core active";
 
-            renderTarget_->DrawTextW(
+            renderTarget_->DrawText(
                 title,
                 ARRAYSIZE(title) - 1,
                 textFormat_,
@@ -317,7 +317,7 @@ private:
                     L"it-IT",
                     &statusFormat))) {
 
-                renderTarget_->DrawTextW(
+                renderTarget_->DrawText(
                     status,
                     ARRAYSIZE(status) - 1,
                     statusFormat,
