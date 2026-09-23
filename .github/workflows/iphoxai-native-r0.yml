@@ -1,0 +1,25 @@
+name: IphoxAI Native R0 CI
+
+on:
+  push:
+    branches:
+      - iphoxai-native-r0-work
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: _workspace/IphoxAI
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
