@@ -16,6 +16,7 @@ add_library(iphox_core STATIC
     src/foundation/JsonLite.cpp
     src/foundation/RequestRegistry.cpp
     src/foundation/Sha256.cpp
+    src/foundation/TextEncoding.cpp
     src/generation/LlamaCppHttpEngine.cpp
     src/generation/UnavailableGenerativeEngine.cpp
     src/rpc/RpcAuthority.cpp
