@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <utility>
 
 namespace iphox::cognitive {
 namespace {
@@ -42,31 +43,41 @@ ValidationResult DecisionValidator::ValidateRequest(
             AddIssue(result, id, "question id is empty");
         }
 
-        if (const auto* q = std::get_if<NoulQuestion>(&question)) {
-            if (q->instructions.empty()) {
+        if (const auto* noul =
+                std::get_if<NoulQuestion>(&question)) {
+
+            if (noul->instructions.empty()) {
                 AddIssue(result, id, "Noul instructions are empty");
             }
-        } else if (const auto* q = std::get_if<ChoiceQuestion>(&question)) {
-            if (q->instructions.empty()) {
+
+        } else if (const auto* choice =
+                       std::get_if<ChoiceQuestion>(&question)) {
+
+            if (choice->instructions.empty()) {
                 AddIssue(result, id, "Choice instructions are empty");
             }
-            if (q->options.size() < 2) {
+
+            if (choice->options.size() < 2) {
                 AddIssue(result, id, "Choice requires at least two options");
             }
 
             std::set<std::string> seen;
-            for (const auto& option : q->options) {
+            for (const auto& option : choice->options) {
                 if (option.id.empty()) {
                     AddIssue(result, id, "Choice option id is empty");
                 } else if (!seen.insert(option.id).second) {
                     AddIssue(result, id, "duplicate Choice option id");
                 }
             }
-        } else if (const auto* q = std::get_if<ScoreQuestion>(&question)) {
-            if (q->instructions.empty()) {
+
+        } else if (const auto* score =
+                       std::get_if<ScoreQuestion>(&question)) {
+
+            if (score->instructions.empty()) {
                 AddIssue(result, id, "Score instructions are empty");
             }
-            if (q->levels.size() < 2) {
+
+            if (score->levels.size() < 2) {
                 AddIssue(result, id, "Score requires at least two levels");
             }
         }
@@ -97,57 +108,77 @@ ValidationResult DecisionValidator::ValidateResponse(
 
         if (std::holds_alternative<NoulQuestion>(question)) {
             const auto* typed = std::get_if<NoulAnswer>(&answer);
+
             if (typed == nullptr) {
                 AddIssue(result, questionId, "answer type mismatch");
                 continue;
             }
+
             if (!IsProbability(typed->yesProbability)) {
                 AddIssue(result, questionId, "invalid Noul probability");
             }
             continue;
         }
 
-        if (const auto* q = std::get_if<ChoiceQuestion>(&question)) {
+        if (const auto* choice =
+                std::get_if<ChoiceQuestion>(&question)) {
+
             const auto* typed = std::get_if<ChoiceAnswer>(&answer);
+
             if (typed == nullptr) {
                 AddIssue(result, questionId, "answer type mismatch");
                 continue;
             }
 
             const auto selectedExists = std::any_of(
-                q->options.begin(),
-                q->options.end(),
+                choice->options.begin(),
+                choice->options.end(),
                 [&](const ChoiceOption& option) {
                     return option.id == typed->selected;
                 });
 
             if (!selectedExists) {
-                AddIssue(result, questionId, "selected choice not in schema");
+                AddIssue(
+                    result,
+                    questionId,
+                    "selected choice not in schema");
             }
 
             double sum{};
-            for (const auto& p : typed->probabilities) {
-                if (!IsProbability(p.value)) {
-                    AddIssue(result, questionId, "invalid Choice probability");
+            for (const auto& probability : typed->probabilities) {
+                if (!IsProbability(probability.value)) {
+                    AddIssue(
+                        result,
+                        questionId,
+                        "invalid Choice probability");
                 }
-                sum += p.value;
+                sum += probability.value;
             }
 
             if (!typed->probabilities.empty() &&
                 std::abs(sum - 1.0) > 1e-6) {
-                AddIssue(result, questionId, "Choice probabilities do not sum to 1");
+                AddIssue(
+                    result,
+                    questionId,
+                    "Choice probabilities do not sum to 1");
             }
 
             if (typed->reportedConfidence.has_value() &&
                 !IsProbability(*typed->reportedConfidence)) {
-                AddIssue(result, questionId, "invalid reported confidence");
+                AddIssue(
+                    result,
+                    questionId,
+                    "invalid reported confidence");
             }
 
             continue;
         }
 
-        if (const auto* q = std::get_if<ScoreQuestion>(&question)) {
+        if (const auto* score =
+                std::get_if<ScoreQuestion>(&question)) {
+
             const auto* typed = std::get_if<ScoreAnswer>(&answer);
+
             if (typed == nullptr) {
                 AddIssue(result, questionId, "answer type mismatch");
                 continue;
@@ -155,31 +186,44 @@ ValidationResult DecisionValidator::ValidateResponse(
 
             if (!std::isfinite(typed->expectedScore) ||
                 typed->expectedScore < 0.0 ||
-                typed->expectedScore > static_cast<double>(q->levels.size() - 1)) {
+                typed->expectedScore >
+                    static_cast<double>(score->levels.size() - 1)) {
                 AddIssue(result, questionId, "Score outside schema");
             }
 
             if (!typed->probabilities.empty() &&
-                typed->probabilities.size() != q->levels.size()) {
-                AddIssue(result, questionId, "Score probability count mismatch");
+                typed->probabilities.size() != score->levels.size()) {
+                AddIssue(
+                    result,
+                    questionId,
+                    "Score probability count mismatch");
             }
 
             double sum{};
-            for (const auto p : typed->probabilities) {
-                if (!IsProbability(p)) {
-                    AddIssue(result, questionId, "invalid Score probability");
+            for (const auto probability : typed->probabilities) {
+                if (!IsProbability(probability)) {
+                    AddIssue(
+                        result,
+                        questionId,
+                        "invalid Score probability");
                 }
-                sum += p;
+                sum += probability;
             }
 
             if (!typed->probabilities.empty() &&
                 std::abs(sum - 1.0) > 1e-6) {
-                AddIssue(result, questionId, "Score probabilities do not sum to 1");
+                AddIssue(
+                    result,
+                    questionId,
+                    "Score probabilities do not sum to 1");
             }
 
             if (typed->reportedConfidence.has_value() &&
                 !IsProbability(*typed->reportedConfidence)) {
-                AddIssue(result, questionId, "invalid reported confidence");
+                AddIssue(
+                    result,
+                    questionId,
+                    "invalid reported confidence");
             }
         }
     }
