@@ -1,6 +1,7 @@
 #include "iphox/capability/CapabilityAuthority.hpp"
 #include "iphox/chat/ChatCodec.hpp"
 #include "iphox/cognitive/BaselineDecisionBackend.hpp"
+#include "iphox/cognitive/DecisionCodec.hpp"
 #include "iphox/cognitive/DecisionValidator.hpp"
 #include "iphox/cognitive/StateProjection.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
@@ -474,7 +475,9 @@ void TestProtocolRejectsMalformedFrames() {
 
 void TestCoreServiceFailClosedAndIdempotent() {
     iphox::generation::UnavailableGenerativeEngine engine;
-    iphox::core::CoreService service{engine, 8};
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+    iphox::core::CoreService service{engine, supervisor, 8};
 
     iphox::ipc::Frame ping;
     ping.header.type =
@@ -544,7 +547,9 @@ void TestCoreServiceFailClosedAndIdempotent() {
 
 void TestCoreServiceRejectsResponseAsRequest() {
     iphox::generation::UnavailableGenerativeEngine engine;
-    iphox::core::CoreService service{engine, 8};
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+    iphox::core::CoreService service{engine, supervisor, 8};
 
     iphox::ipc::Frame invalid;
     invalid.header.type =
@@ -594,7 +599,9 @@ void TestChatCodecRoundTripAndValidation() {
 
 void TestChatSubmitRejectsMalformedPayload() {
     iphox::generation::UnavailableGenerativeEngine engine;
-    iphox::core::CoreService service{engine, 8};
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+    iphox::core::CoreService service{engine, supervisor, 8};
 
     iphox::ipc::Frame chat;
     chat.header.type =
@@ -619,6 +626,115 @@ void TestChatSubmitRejectsMalformedPayload() {
         "INVALID_CHAT_PAYLOAD");
 }
 
+
+void TestDecisionCodecRoundTrip() {
+    auto request = MakeRequest();
+    request.state["decision.intent"] = "project_work";
+    request.state["decision.needs_memory"] = "true";
+    request.state["decision.complexity"] = "2";
+
+    const auto encoded =
+        iphox::cognitive::DecisionCodec::EncodeRequest(
+            request);
+
+    const auto decoded =
+        iphox::cognitive::DecisionCodec::DecodeRequest(
+            encoded);
+
+    assert(decoded.ok());
+    assert(decoded.value.schemaId == request.schemaId);
+    assert(decoded.value.schemaVersion == request.schemaVersion);
+    assert(decoded.value.state == request.state);
+    assert(decoded.value.questions.size() == request.questions.size());
+}
+
+void TestCoreServiceDecisionEvaluate() {
+    iphox::generation::UnavailableGenerativeEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        8
+    };
+
+    auto decisionRequest = MakeRequest();
+    decisionRequest.state["decision.intent"] = "project_work";
+    decisionRequest.state["decision.needs_memory"] = "true";
+    decisionRequest.state["decision.complexity"] = "2";
+
+    iphox::ipc::Frame frame;
+    frame.header.type =
+        iphox::ipc::MessageType::DecisionEvaluate;
+    frame.header.requestId = 950;
+    frame.payload =
+        iphox::cognitive::DecisionCodec::EncodeRequest(
+            decisionRequest);
+
+    const auto result =
+        service.Handle(frame);
+
+    assert(
+        result.response.header.type ==
+        iphox::ipc::MessageType::DecisionTrace);
+
+    assert(
+        (result.response.header.flags &
+            iphox::ipc::kFlagError) == 0);
+
+    const auto decoded =
+        iphox::cognitive::DecisionCodec::DecodeResponse(
+            result.response.payload);
+
+    assert(decoded.ok());
+
+    const auto intent =
+        decoded.value.answers.find("intent");
+
+    assert(intent != decoded.value.answers.end());
+
+    const auto* choice =
+        std::get_if<ChoiceAnswer>(
+            &intent->second);
+
+    assert(choice != nullptr);
+    assert(choice->selected == "project_work");
+    assert(choice->reportedConfidence.has_value());
+    assert(*choice->reportedConfidence == 1.0);
+}
+
+void TestCoreServiceRejectsMalformedDecisionPayload() {
+    iphox::generation::UnavailableGenerativeEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        8
+    };
+
+    iphox::ipc::Frame frame;
+    frame.header.type =
+        iphox::ipc::MessageType::DecisionEvaluate;
+    frame.header.requestId = 951;
+    frame.payload = {
+        std::byte{'x'},
+        std::byte{'x'}
+    };
+
+    const auto result =
+        service.Handle(frame);
+
+    assert(
+        result.response.header.type ==
+        iphox::ipc::MessageType::Error);
+
+    assert(
+        iphox::ipc::FromPayload(
+            result.response.payload) ==
+        "INVALID_DECISION_PAYLOAD");
+}
+
 } // namespace
 
 int main() {
@@ -638,6 +754,9 @@ int main() {
     TestCoreServiceRejectsResponseAsRequest();
     TestChatCodecRoundTripAndValidation();
     TestChatSubmitRejectsMalformedPayload();
+    TestDecisionCodecRoundTrip();
+    TestCoreServiceDecisionEvaluate();
+    TestCoreServiceRejectsMalformedDecisionPayload();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
