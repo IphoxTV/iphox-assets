@@ -1,4 +1,6 @@
 #include "iphox/core/CoreService.hpp"
+#include "iphox/cognitive/BaselineDecisionBackend.hpp"
+#include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
@@ -24,7 +26,13 @@ int wmain() {
     }
 
     iphox::generation::UnavailableGenerativeEngine engine;
-    iphox::core::CoreService service{engine, 1024};
+    iphox::cognitive::BaselineDecisionBackend decisions;
+    iphox::cognitive::Supervisor supervisor{decisions};
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        1024
+    };
 
     if (!lifecycle.MarkReady()) {
         lifecycle.MarkFaulted();
