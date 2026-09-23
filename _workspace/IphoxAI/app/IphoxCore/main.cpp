@@ -2,7 +2,7 @@
 #include "iphox/cognitive/BaselineDecisionBackend.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
-#include "iphox/generation/UnavailableGenerativeEngine.hpp"
+#include "iphox/generation/LlamaCppHttpEngine.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
 
 #include <chrono>
@@ -25,7 +25,7 @@ int wmain() {
         return 11;
     }
 
-    iphox::generation::UnavailableGenerativeEngine engine;
+    iphox::generation::LlamaCppHttpEngine engine;
     iphox::cognitive::BaselineDecisionBackend decisions;
     iphox::cognitive::Supervisor supervisor{decisions};
     iphox::core::CoreService service{
