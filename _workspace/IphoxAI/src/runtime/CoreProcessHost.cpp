@@ -1,34 +1,11 @@
 #include "iphox/runtime/CoreProcessHost.hpp"
+#include "iphox/runtime/Paths.hpp"
 
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace iphox::runtime {
-namespace {
-
-std::filesystem::path CurrentExecutablePath() {
-    std::vector<wchar_t> buffer(32768);
-
-    const DWORD length = GetModuleFileNameW(
-        nullptr,
-        buffer.data(),
-        static_cast<DWORD>(buffer.size()));
-
-    if (length == 0 ||
-        length >= buffer.size()) {
-        return {};
-    }
-
-    return std::filesystem::path{
-        std::wstring{
-            buffer.data(),
-            length
-        }
-    };
-}
-
-} // namespace
 
 CoreProcessHost::~CoreProcessHost() {
     Close();
@@ -37,7 +14,7 @@ CoreProcessHost::~CoreProcessHost() {
 bool CoreProcessHost::StartSiblingCore() {
     Close();
 
-    const auto executable = CurrentExecutablePath();
+    const auto executable = ExecutablePath();
     if (executable.empty()) {
         return false;
     }
