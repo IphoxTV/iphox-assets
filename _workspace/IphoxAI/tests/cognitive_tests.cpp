@@ -4,13 +4,16 @@
 #include "iphox/cognitive/StateProjection.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
+#include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
 
 #include <cassert>
+#include <cstddef>
 #include <iostream>
 #include <stop_token>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace iphox::cognitive;
 
@@ -188,6 +191,30 @@ void TestRequestIdempotencyAndConflict() {
     assert(found->completed);
 }
 
+void TestRequestRegistryHardBound() {
+    iphox::foundation::RequestRegistry registry{2};
+
+    assert(
+        registry.Register(1, "A") ==
+        iphox::foundation::RegisterResult::NewRequest);
+    assert(
+        registry.Register(2, "B") ==
+        iphox::foundation::RegisterResult::NewRequest);
+
+    assert(
+        registry.Register(3, "C") ==
+        iphox::foundation::RegisterResult::CapacityExhausted);
+    assert(registry.Size() == 2);
+
+    registry.MarkCompleted(1);
+
+    assert(
+        registry.Register(3, "C") ==
+        iphox::foundation::RegisterResult::NewRequest);
+    assert(registry.Size() == 2);
+    assert(!registry.Find(1).has_value());
+}
+
 class EchoController final : public iphox::rpc::IDomainController {
 public:
     iphox::rpc::RpcResult Handle(
@@ -261,6 +288,50 @@ void TestCapabilityAuthorityFailsClosed() {
     assert(rejected.code == "DECISION_NOT_ACCEPTED");
 }
 
+void TestProtocolRoundTrip() {
+    iphox::ipc::Frame frame;
+    frame.header.type = iphox::ipc::MessageType::DecisionEvaluate;
+    frame.header.requestId = 99;
+    frame.header.flags = 7;
+    frame.payload = {
+        std::byte{0x10},
+        std::byte{0x20},
+        std::byte{0x30}
+    };
+
+    const auto encoded = iphox::ipc::Protocol::Encode(frame);
+    const auto decoded = iphox::ipc::Protocol::Decode(encoded);
+
+    assert(decoded.ok());
+    assert(decoded.frame.header.type ==
+        iphox::ipc::MessageType::DecisionEvaluate);
+    assert(decoded.frame.header.requestId == 99);
+    assert(decoded.frame.header.flags == 7);
+    assert(decoded.frame.payload == frame.payload);
+}
+
+void TestProtocolRejectsMalformedFrames() {
+    iphox::ipc::Frame frame;
+    frame.header.type = iphox::ipc::MessageType::Ping;
+    frame.header.requestId = 2;
+
+    auto encoded = iphox::ipc::Protocol::Encode(frame);
+
+    auto badMagic = encoded;
+    badMagic[0] = std::byte{'X'};
+    assert(
+        iphox::ipc::Protocol::Decode(badMagic).status ==
+        iphox::ipc::FrameStatus::BadMagic);
+
+    auto truncated = encoded;
+    truncated.pop_back();
+    assert(
+        iphox::ipc::Protocol::Decode(truncated).status ==
+        iphox::ipc::FrameStatus::TooShort ||
+        iphox::ipc::Protocol::Decode(truncated).status ==
+        iphox::ipc::FrameStatus::LengthMismatch);
+}
+
 } // namespace
 
 int main() {
@@ -270,8 +341,11 @@ int main() {
     TestInvalidProbabilityRejected();
     TestCancellationFailsClosed();
     TestRequestIdempotencyAndConflict();
+    TestRequestRegistryHardBound();
     TestRpcFailClosed();
     TestCapabilityAuthorityFailsClosed();
+    TestProtocolRoundTrip();
+    TestProtocolRejectsMalformedFrames();
 
     std::cout << "IphoxAI native core baseline tests: PASS\n";
     return 0;
