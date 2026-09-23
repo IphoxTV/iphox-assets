@@ -8,9 +8,11 @@
 #include <cctype>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 namespace iphox::runtime {
 namespace {
