@@ -49,5 +49,11 @@ add_executable(iphox_core_tests
 )
 target_link_libraries(iphox_core_tests PRIVATE iphox_core)
 
+add_executable(iphox_core_ipc_smoke
+    tests/core_ipc_smoke.cpp
+)
+target_link_libraries(iphox_core_ipc_smoke PRIVATE iphox_core)
+
 enable_testing()
 add_test(NAME iphox_core_tests COMMAND iphox_core_tests)
+add_test(NAME iphox_core_ipc_smoke COMMAND iphox_core_ipc_smoke)
