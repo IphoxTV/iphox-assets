@@ -19,6 +19,9 @@ inline constexpr std::array<std::byte, 4> kMagic{
 inline constexpr std::uint16_t kProtocolVersion = 1;
 inline constexpr std::uint32_t kMaxPayloadBytes = 4u * 1024u * 1024u;
 
+inline constexpr std::uint32_t kFlagResponse = 1u << 0;
+inline constexpr std::uint32_t kFlagError = 1u << 1;
+
 enum class MessageType : std::uint16_t {
     Hello = 1,
     Snapshot = 2,
