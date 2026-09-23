@@ -1,5 +1,6 @@
 #include "iphox/core/CoreService.hpp"
 
+#include "iphox/chat/ChatCodec.hpp"
 #include "iphox/ipc/Payload.hpp"
 
 #include <cstddef>
@@ -42,11 +43,14 @@ void MixIntegral(
 } // namespace
 
 CoreService::CoreService(
+    generation::IGenerativeEngine& engine,
     std::size_t requestCapacity)
-    : requests_(requestCapacity) {}
+    : engine_(engine),
+      requests_(requestCapacity) {}
 
 HandleResult CoreService::Handle(
-    const ipc::Frame& request) {
+    const ipc::Frame& request,
+    std::stop_token stopToken) {
 
     if ((request.header.flags &
             ipc::kFlagResponse) != 0) {
@@ -139,12 +143,74 @@ HandleResult CoreService::Handle(
                 ipc::MessageType::Pong);
         break;
 
-    case ipc::MessageType::ChatSubmit:
-        result.response =
-            MakeError(
-                request,
-                "ENGINE_UNAVAILABLE");
+    case ipc::MessageType::ChatSubmit: {
+        const auto chat =
+            chat::ChatCodec::Decode(
+                request.payload);
+
+        if (!chat.ok()) {
+            result.response =
+                MakeError(
+                    request,
+                    "INVALID_CHAT_PAYLOAD");
+            break;
+        }
+
+        if (chat.value.text.empty()) {
+            result.response =
+                MakeError(
+                    request,
+                    "EMPTY_CHAT");
+            break;
+        }
+
+        const auto generation =
+            engine_.Generate(
+                {
+                    .prompt = chat.value.text
+                },
+                stopToken);
+
+        switch (generation.status) {
+        case generation::GenerationStatus::Completed:
+            result.response =
+                MakeResponse(
+                    request,
+                    ipc::MessageType::ChatStatus);
+            result.response.payload =
+                ipc::ToPayload(
+                    generation.text);
+            break;
+
+        case generation::GenerationStatus::Cancelled:
+            result.response =
+                MakeError(
+                    request,
+                    generation.errorCode.empty()
+                        ? "CANCELLED"
+                        : generation.errorCode);
+            break;
+
+        case generation::GenerationStatus::Unavailable:
+            result.response =
+                MakeError(
+                    request,
+                    generation.errorCode.empty()
+                        ? "ENGINE_UNAVAILABLE"
+                        : generation.errorCode);
+            break;
+
+        case generation::GenerationStatus::Failed:
+            result.response =
+                MakeError(
+                    request,
+                    generation.errorCode.empty()
+                        ? "GENERATION_FAILED"
+                        : generation.errorCode);
+            break;
+        }
         break;
+    }
 
     case ipc::MessageType::DecisionEvaluate:
         result.response =
