@@ -3,6 +3,8 @@
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
+#include "iphox/runtime/Paths.hpp"
+#include "iphox/runtime/RuntimeConfig.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
 
 #include <chrono>
@@ -25,7 +27,22 @@ int wmain() {
         return 11;
     }
 
-    iphox::generation::LlamaCppHttpEngine engine;
+    const auto root =
+        iphox::runtime::ExecutableDirectory();
+
+    const auto runtimeConfig =
+        iphox::runtime::RuntimeConfigLoader::Load(
+            root / L"IphoxAI.config");
+
+    if (!runtimeConfig.valid) {
+        lifecycle.MarkFaulted();
+        return 16;
+    }
+
+    iphox::generation::LlamaCppHttpEngine engine{
+        runtimeConfig.config.llama
+    };
+
     iphox::cognitive::BaselineDecisionBackend decisions;
     iphox::cognitive::Supervisor supervisor{decisions};
     iphox::core::CoreService service{
