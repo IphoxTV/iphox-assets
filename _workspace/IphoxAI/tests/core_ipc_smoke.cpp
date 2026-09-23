@@ -1,3 +1,4 @@
+#include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/ipc/SecurePipeClient.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
@@ -16,6 +17,22 @@ int wmain() {
     assert(client.Connect(
         iphox::ipc::kCorePipeName,
         5000));
+
+    iphox::ipc::Frame hello;
+    hello.header.type = iphox::ipc::MessageType::Hello;
+    hello.header.requestId = 1000;
+
+    assert(client.WriteFrame(hello));
+
+    const auto helloAck = client.ReadFrame();
+    assert(helloAck.has_value());
+    assert(
+        helloAck->header.type ==
+        iphox::ipc::MessageType::Hello);
+    assert(
+        iphox::ipc::FromPayload(
+            helloAck->payload) ==
+        "IphoxCore Native R0");
 
     iphox::ipc::Frame ping;
     ping.header.type = iphox::ipc::MessageType::Ping;
