@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace iphox::foundation {
 
@@ -21,6 +22,7 @@ struct RequestSnapshot {
     std::uint64_t requestId{};
     std::string fingerprint;
     bool completed{};
+    std::vector<std::byte> encodedResponse;
 };
 
 class RequestRegistry final {
@@ -31,7 +33,9 @@ public:
         std::uint64_t requestId,
         std::string fingerprint);
 
-    void MarkCompleted(std::uint64_t requestId);
+    [[nodiscard]] bool MarkCompleted(
+        std::uint64_t requestId,
+        std::vector<std::byte> encodedResponse);
 
     [[nodiscard]] std::optional<RequestSnapshot> Find(
         std::uint64_t requestId) const;
