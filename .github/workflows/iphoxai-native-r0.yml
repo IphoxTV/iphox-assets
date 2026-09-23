@@ -38,8 +38,10 @@ jobs:
 
           Copy-Item "build/Release/IphoxAI.exe" $bin
           Copy-Item "build/Release/IphoxCore.exe" $bin
+          Copy-Item "IphoxAI.config" $bin
           Copy-Item "README.md" $root
           Copy-Item "CMakeLists.txt" $source
+          Copy-Item "IphoxAI.config" $source
           Copy-Item "app" $source -Recurse
           Copy-Item "include" $source -Recurse
           Copy-Item "src" $source -Recurse
