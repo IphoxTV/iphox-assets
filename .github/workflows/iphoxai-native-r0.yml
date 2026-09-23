@@ -12,6 +12,7 @@ jobs:
     defaults:
       run:
         working-directory: _workspace/IphoxAI
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,3 +24,34 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package checkpoint
+        shell: pwsh
+        run: |
+          $root = "dist/IphoxAI_Native_R0_CHECKPOINT"
+          $bin = Join-Path $root "bin"
+          $source = Join-Path $root "source"
+
+          Remove-Item -Recurse -Force "dist" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          New-Item -ItemType Directory -Force $source | Out-Null
+
+          Copy-Item "build/Release/IphoxAI.exe" $bin
+          Copy-Item "build/Release/IphoxCore.exe" $bin
+          Copy-Item "README.md" $root
+          Copy-Item "CMakeLists.txt" $source
+          Copy-Item "app" $source -Recurse
+          Copy-Item "include" $source -Recurse
+          Copy-Item "src" $source -Recurse
+          Copy-Item "tests" $source -Recurse
+
+          git rev-parse HEAD | Out-File -Encoding ascii (Join-Path $root "GIT_COMMIT.txt")
+          Compress-Archive -Path "$root/*" -DestinationPath "dist/IphoxAI_Native_R0_CHECKPOINT.zip" -CompressionLevel Optimal
+
+      - name: Upload checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: IphoxAI_Native_R0_CHECKPOINT
+          path: _workspace/IphoxAI/dist/IphoxAI_Native_R0_CHECKPOINT.zip
+          if-no-files-found: error
+          retention-days: 30
