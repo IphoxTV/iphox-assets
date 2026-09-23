@@ -8,7 +8,8 @@ namespace iphox::foundation {
 RequestRegistry::RequestRegistry(std::size_t capacity)
     : capacity_(capacity) {
     if (capacity_ == 0) {
-        throw std::invalid_argument("RequestRegistry capacity must be non-zero");
+        throw std::invalid_argument(
+            "RequestRegistry capacity must be non-zero");
     }
 }
 
@@ -18,7 +19,10 @@ RegisterResult RequestRegistry::Register(
 
     std::scoped_lock lock{mutex_};
 
-    if (const auto it = records_.find(requestId); it != records_.end()) {
+    if (const auto it =
+            records_.find(requestId);
+        it != records_.end()) {
+
         return it->second.fingerprint == fingerprint
             ? RegisterResult::Duplicate
             : RegisterResult::Conflict;
@@ -31,23 +35,37 @@ RegisterResult RequestRegistry::Register(
     }
 
     order_.push_back(requestId);
+
     records_.emplace(
         requestId,
         RequestSnapshot{
             .requestId = requestId,
             .fingerprint = std::move(fingerprint),
-            .completed = false
+            .completed = false,
+            .encodedResponse = {}
         });
 
     return RegisterResult::NewRequest;
 }
 
-void RequestRegistry::MarkCompleted(std::uint64_t requestId) {
+bool RequestRegistry::MarkCompleted(
+    std::uint64_t requestId,
+    std::vector<std::byte> encodedResponse) {
+
     std::scoped_lock lock{mutex_};
 
-    if (const auto it = records_.find(requestId); it != records_.end()) {
-        it->second.completed = true;
+    const auto it =
+        records_.find(requestId);
+
+    if (it == records_.end()) {
+        return false;
     }
+
+    it->second.encodedResponse =
+        std::move(encodedResponse);
+
+    it->second.completed = true;
+    return true;
 }
 
 std::optional<RequestSnapshot> RequestRegistry::Find(
@@ -55,7 +73,9 @@ std::optional<RequestSnapshot> RequestRegistry::Find(
 
     std::scoped_lock lock{mutex_};
 
-    if (const auto it = records_.find(requestId); it != records_.end()) {
+    if (const auto it =
+            records_.find(requestId);
+        it != records_.end()) {
         return it->second;
     }
 
@@ -70,11 +90,18 @@ std::size_t RequestRegistry::Size() const {
 bool RequestRegistry::EvictOneCompleted() {
     const auto count = order_.size();
 
-    for (std::size_t i = 0; i < count; ++i) {
-        const auto requestId = order_.front();
+    for (std::size_t i = 0;
+         i < count;
+         ++i) {
+
+        const auto requestId =
+            order_.front();
+
         order_.pop_front();
 
-        const auto it = records_.find(requestId);
+        const auto it =
+            records_.find(requestId);
+
         if (it == records_.end()) {
             continue;
         }
