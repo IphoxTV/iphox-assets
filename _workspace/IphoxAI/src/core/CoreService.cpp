@@ -2,41 +2,30 @@
 
 #include "iphox/chat/ChatCodec.hpp"
 #include "iphox/cognitive/DecisionCodec.hpp"
+#include "iphox/foundation/Sha256.hpp"
 #include "iphox/ipc/Payload.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace iphox::core {
 namespace {
 
-void MixByte(
-    std::uint64_t& hash,
-    std::uint8_t value) noexcept {
-
-    constexpr std::uint64_t kPrime =
-        1099511628211ull;
-
-    hash ^= value;
-    hash *= kPrime;
-}
-
 template <typename T>
-void MixIntegral(
-    std::uint64_t& hash,
-    T value) noexcept {
+void AppendLe(
+    std::vector<std::byte>& bytes,
+    T value) {
 
+    static_assert(std::is_integral_v<T>);
     using U = std::make_unsigned_t<T>;
     const U raw = static_cast<U>(value);
 
     for (std::size_t i = 0; i < sizeof(T); ++i) {
-        MixByte(
-            hash,
-            static_cast<std::uint8_t>(
+        bytes.push_back(
+            static_cast<std::byte>(
                 (raw >> (i * 8)) & U{0xFF}));
     }
 }
@@ -68,10 +57,19 @@ HandleResult CoreService::Handle(
     const auto fingerprint =
         Fingerprint(request);
 
+    if (!fingerprint.has_value()) {
+        return {
+            .response = MakeError(
+                request,
+                "REQUEST_FINGERPRINT_FAILED"),
+            .requestShutdown = false
+        };
+    }
+
     const auto registration =
         requests_.Register(
             request.header.requestId,
-            fingerprint);
+            *fingerprint);
 
     if (registration ==
         foundation::RegisterResult::Conflict) {
@@ -233,7 +231,7 @@ HandleResult CoreService::Handle(
                 supervisor_.Evaluate(
                     request.header.requestId,
                     decoded.value,
-                    Fingerprint(request),
+                    *fingerprint,
                     "body-policy-unavailable",
                     stopToken);
 
@@ -287,39 +285,42 @@ HandleResult CoreService::Handle(
     return result;
 }
 
-std::string CoreService::Fingerprint(
+std::optional<std::string> CoreService::Fingerprint(
     const ipc::Frame& request) {
 
-    std::uint64_t hash =
-        14695981039346656037ull;
+    std::vector<std::byte> material;
+    material.reserve(
+        sizeof(request.header.version) +
+        sizeof(std::uint16_t) +
+        sizeof(request.header.flags) +
+        request.payload.size());
 
-    MixIntegral(
-        hash,
+    AppendLe(
+        material,
         request.header.version);
 
-    MixIntegral(
-        hash,
+    AppendLe(
+        material,
         static_cast<std::uint16_t>(
             request.header.type));
 
-    MixIntegral(
-        hash,
+    AppendLe(
+        material,
         request.header.flags);
 
-    for (const auto byte : request.payload) {
-        MixByte(
-            hash,
-            std::to_integer<std::uint8_t>(byte));
+    material.insert(
+        material.end(),
+        request.payload.begin(),
+        request.payload.end());
+
+    const auto digest =
+        foundation::Sha256(material);
+
+    if (!digest.has_value()) {
+        return std::nullopt;
     }
 
-    std::ostringstream out;
-    out
-        << std::hex
-        << std::setw(16)
-        << std::setfill('0')
-        << hash;
-
-    return out.str();
+    return foundation::Hex(*digest);
 }
 
 ipc::Frame CoreService::MakeResponse(
