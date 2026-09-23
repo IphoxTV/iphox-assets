@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <vector>
 
