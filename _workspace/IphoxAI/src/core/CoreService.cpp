@@ -164,14 +164,14 @@ HandleResult CoreService::Handle(
             break;
         }
 
-        const auto generation =
+        const auto generationResult =
             engine_.Generate(
                 {
                     .prompt = chat.value.text
                 },
                 stopToken);
 
-        switch (generation.status) {
+        switch (generationResult.status) {
         case generation::GenerationStatus::Completed:
             result.response =
                 MakeResponse(
@@ -179,34 +179,34 @@ HandleResult CoreService::Handle(
                     ipc::MessageType::ChatStatus);
             result.response.payload =
                 ipc::ToPayload(
-                    generation.text);
+                    generationResult.text);
             break;
 
         case generation::GenerationStatus::Cancelled:
             result.response =
                 MakeError(
                     request,
-                    generation.errorCode.empty()
+                    generationResult.errorCode.empty()
                         ? "CANCELLED"
-                        : generation.errorCode);
+                        : generationResult.errorCode);
             break;
 
         case generation::GenerationStatus::Unavailable:
             result.response =
                 MakeError(
                     request,
-                    generation.errorCode.empty()
+                    generationResult.errorCode.empty()
                         ? "ENGINE_UNAVAILABLE"
-                        : generation.errorCode);
+                        : generationResult.errorCode);
             break;
 
         case generation::GenerationStatus::Failed:
             result.response =
                 MakeError(
                     request,
-                    generation.errorCode.empty()
+                    generationResult.errorCode.empty()
                         ? "GENERATION_FAILED"
-                        : generation.errorCode);
+                        : generationResult.errorCode);
             break;
         }
         break;
