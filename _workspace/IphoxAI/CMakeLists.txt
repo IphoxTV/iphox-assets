@@ -13,8 +13,10 @@ add_library(iphox_core STATIC
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
     src/foundation/CoreLifecycle.cpp
+    src/foundation/JsonLite.cpp
     src/foundation/RequestRegistry.cpp
     src/foundation/Sha256.cpp
+    src/generation/LlamaCppHttpEngine.cpp
     src/generation/UnavailableGenerativeEngine.cpp
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
@@ -25,7 +27,7 @@ add_library(iphox_core STATIC
 )
 
 target_include_directories(iphox_core PUBLIC include)
-target_link_libraries(iphox_core PUBLIC advapi32 bcrypt)
+target_link_libraries(iphox_core PUBLIC advapi32 bcrypt winhttp)
 
 if(MSVC)
     target_compile_options(iphox_core PRIVATE /W4 /permissive- /EHsc)
