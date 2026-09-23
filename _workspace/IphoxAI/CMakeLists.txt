@@ -6,12 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(iphox_core STATIC
+    src/chat/ChatCodec.cpp
     src/core/CoreService.cpp
     src/cognitive/BaselineDecisionBackend.cpp
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
     src/foundation/CoreLifecycle.cpp
     src/foundation/RequestRegistry.cpp
+    src/generation/UnavailableGenerativeEngine.cpp
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
     src/ipc/Protocol.cpp
