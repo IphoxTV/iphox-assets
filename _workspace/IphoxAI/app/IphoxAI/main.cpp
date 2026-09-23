@@ -2,12 +2,18 @@
 #define _UNICODE
 #define WIN32_LEAN_AND_MEAN
 
+#include "iphox/ipc/SecurePipeClient.hpp"
+#include "iphox/ipc/SecurePipeServer.hpp"
+#include "iphox/runtime/CoreProcessHost.hpp"
+
 #include <windows.h>
 #include <shellapi.h>
 #include <d2d1.h>
 #include <dwrite.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <string>
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
@@ -25,6 +31,7 @@ constexpr UINT kTrayExit = 1002;
 class NativeWindow final {
 public:
     ~NativeWindow() {
+        ShutdownCore();
         RemoveTrayIcon();
         ReleaseDeviceResources();
 
@@ -102,6 +109,7 @@ public:
         }
 
         AddTrayIcon();
+        StartCore();
 
         ShowWindow(hwnd_, showCommand);
         UpdateWindow(hwnd_);
@@ -192,12 +200,17 @@ private:
             ShowWindow(hwnd_, SW_HIDE);
             return 0;
 
+        case WM_QUERYENDSESSION:
+            ShutdownCore();
+            return TRUE;
+
         case WM_COMMAND:
             if (LOWORD(wParam) == kTrayOpen) {
                 RestoreFromTray();
                 return 0;
             }
             if (LOWORD(wParam) == kTrayExit) {
+                ShutdownCore();
                 DestroyWindow(hwnd_);
                 return 0;
             }
@@ -216,6 +229,7 @@ private:
             break;
 
         case WM_DESTROY:
+            ShutdownCore();
             RemoveTrayIcon();
             PostQuitMessage(0);
             return 0;
@@ -292,8 +306,6 @@ private:
                     1.0f));
 
             const wchar_t title[] = L"IphoxAI";
-            const wchar_t status[] =
-                L"Native C++ recovery core active";
 
             renderTarget_->DrawText(
                 title,
@@ -318,8 +330,8 @@ private:
                     &statusFormat))) {
 
                 renderTarget_->DrawText(
-                    status,
-                    ARRAYSIZE(status) - 1,
+                    coreStatus_.c_str(),
+                    static_cast<UINT32>(coreStatus_.size()),
                     statusFormat,
                     D2D1::RectF(
                         50.0f,
@@ -338,6 +350,73 @@ private:
         }
 
         EndPaint(hwnd_, &ps);
+    }
+
+    void StartCore() {
+        coreStatus_ = L"Avvio IphoxCore...";
+
+        if (!coreProcess_.StartSiblingCore()) {
+            coreStatus_ = L"IphoxCore: avvio fallito";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        if (!coreClient_.Connect(
+                iphox::ipc::kCorePipeName,
+                5000)) {
+            coreStatus_ = L"IphoxCore: pipe non disponibile";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        iphox::ipc::Frame ping;
+        ping.header.type = iphox::ipc::MessageType::Ping;
+        ping.header.requestId = nextRequestId_++;
+
+        if (!coreClient_.WriteFrame(ping)) {
+            coreStatus_ = L"IphoxCore: handshake write fallito";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        const auto pong = coreClient_.ReadFrame();
+
+        if (!pong.has_value() ||
+            pong->header.type != iphox::ipc::MessageType::Pong ||
+            (pong->header.flags & iphox::ipc::kFlagResponse) == 0) {
+            coreStatus_ = L"IphoxCore: handshake non valido";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        coreReady_ = true;
+        coreStatus_ = L"IphoxCore connesso · Native C++";
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    void ShutdownCore() noexcept {
+        if (coreShutdown_) {
+            return;
+        }
+
+        coreShutdown_ = true;
+
+        if (coreClient_.IsOpen() && coreReady_) {
+            iphox::ipc::Frame shutdown;
+            shutdown.header.type =
+                iphox::ipc::MessageType::CoreShutdown;
+            shutdown.header.requestId = nextRequestId_++;
+
+            if (coreClient_.WriteFrame(shutdown)) {
+                (void)coreClient_.ReadFrame();
+            }
+        }
+
+        coreClient_.Close();
+        (void)coreProcess_.WaitForExit(1500);
+        coreProcess_.Close();
+
+        coreReady_ = false;
     }
 
     void AddTrayIcon() {
@@ -437,6 +516,14 @@ private:
     IDWriteFactory* dwriteFactory_{};
     IDWriteTextFormat* textFormat_{};
 
+    iphox::runtime::CoreProcessHost coreProcess_;
+    iphox::ipc::SecurePipeClient coreClient_;
+
+    std::wstring coreStatus_{L"IphoxCore non inizializzato"};
+
+    std::uint64_t nextRequestId_{1};
+    bool coreReady_{};
+    bool coreShutdown_{};
     bool trayAdded_{};
 };
 
