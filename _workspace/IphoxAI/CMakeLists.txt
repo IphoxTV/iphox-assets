@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(iphox_core STATIC
+    src/core/CoreService.cpp
     src/cognitive/BaselineDecisionBackend.cpp
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
