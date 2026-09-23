@@ -3,11 +3,13 @@
 #include "iphox/cognitive/DecisionValidator.hpp"
 #include "iphox/cognitive/StateProjection.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
+#include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
 
 #include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <iostream>
 #include <stop_token>
@@ -215,6 +217,35 @@ void TestRequestRegistryHardBound() {
     assert(!registry.Find(1).has_value());
 }
 
+void TestCoreLifecycleDrainsOwnedWork() {
+    iphox::foundation::CoreLifecycle lifecycle;
+
+    assert(lifecycle.BeginStart());
+    assert(lifecycle.MarkReady());
+
+    auto first = lifecycle.TryAcquireJob();
+    auto second = lifecycle.TryAcquireJob();
+
+    assert(first.has_value());
+    assert(second.has_value());
+    assert(lifecycle.ActiveJobs() == 2);
+
+    assert(lifecycle.RequestStop());
+
+    auto rejected = lifecycle.TryAcquireJob();
+    assert(!rejected.has_value());
+
+    first.reset();
+    assert(lifecycle.ActiveJobs() == 1);
+    assert(!lifecycle.WaitForDrain(std::chrono::milliseconds{1}));
+
+    second.reset();
+
+    assert(lifecycle.WaitForDrain(std::chrono::milliseconds{10}));
+    assert(lifecycle.MarkStopped());
+    assert(lifecycle.State() == iphox::foundation::CoreState::Stopped);
+}
+
 class EchoController final : public iphox::rpc::IDomainController {
 public:
     iphox::rpc::RpcResult Handle(
@@ -325,11 +356,13 @@ void TestProtocolRejectsMalformedFrames() {
 
     auto truncated = encoded;
     truncated.pop_back();
+
+    const auto result =
+        iphox::ipc::Protocol::Decode(truncated);
+
     assert(
-        iphox::ipc::Protocol::Decode(truncated).status ==
-        iphox::ipc::FrameStatus::TooShort ||
-        iphox::ipc::Protocol::Decode(truncated).status ==
-        iphox::ipc::FrameStatus::LengthMismatch);
+        result.status == iphox::ipc::FrameStatus::TooShort ||
+        result.status == iphox::ipc::FrameStatus::LengthMismatch);
 }
 
 } // namespace
@@ -342,6 +375,7 @@ int main() {
     TestCancellationFailsClosed();
     TestRequestIdempotencyAndConflict();
     TestRequestRegistryHardBound();
+    TestCoreLifecycleDrainsOwnedWork();
     TestRpcFailClosed();
     TestCapabilityAuthorityFailsClosed();
     TestProtocolRoundTrip();
