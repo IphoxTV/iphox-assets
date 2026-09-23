@@ -1,6 +1,7 @@
 #include "iphox/core/CoreService.hpp"
 
 #include "iphox/chat/ChatCodec.hpp"
+#include "iphox/cognitive/DecisionCodec.hpp"
 #include "iphox/ipc/Payload.hpp"
 
 #include <cstddef>
@@ -44,8 +45,10 @@ void MixIntegral(
 
 CoreService::CoreService(
     generation::IGenerativeEngine& engine,
+    cognitive::Supervisor& supervisor,
     std::size_t requestCapacity)
     : engine_(engine),
+      supervisor_(supervisor),
       requests_(requestCapacity) {}
 
 HandleResult CoreService::Handle(
@@ -212,12 +215,45 @@ HandleResult CoreService::Handle(
         break;
     }
 
-    case ipc::MessageType::DecisionEvaluate:
-        result.response =
-            MakeError(
-                request,
-                "DECISION_CODEC_UNAVAILABLE");
+    case ipc::MessageType::DecisionEvaluate: {
+        const auto decoded =
+            cognitive::DecisionCodec::DecodeRequest(
+                request.payload);
+
+        if (!decoded.ok()) {
+            result.response =
+                MakeError(
+                    request,
+                    "INVALID_DECISION_PAYLOAD");
+            break;
+        }
+
+        try {
+            const auto supervisorResult =
+                supervisor_.Evaluate(
+                    request.header.requestId,
+                    decoded.value,
+                    Fingerprint(request),
+                    "body-policy-unavailable",
+                    stopToken);
+
+            result.response =
+                MakeResponse(
+                    request,
+                    ipc::MessageType::DecisionTrace);
+
+            result.response.payload =
+                cognitive::DecisionCodec::EncodeResponse(
+                    supervisorResult.receipt.response);
+
+        } catch (...) {
+            result.response =
+                MakeError(
+                    request,
+                    "INVALID_DECISION_REQUEST");
+        }
         break;
+    }
 
     case ipc::MessageType::CoreShutdown:
         result.response =
