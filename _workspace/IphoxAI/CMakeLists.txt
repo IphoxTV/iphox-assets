@@ -9,6 +9,7 @@ add_library(iphox_core STATIC
     src/chat/ChatCodec.cpp
     src/core/CoreService.cpp
     src/cognitive/BaselineDecisionBackend.cpp
+    src/cognitive/DecisionCodec.cpp
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
     src/foundation/CoreLifecycle.cpp
