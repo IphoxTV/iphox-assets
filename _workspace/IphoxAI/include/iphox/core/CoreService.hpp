@@ -6,6 +6,7 @@
 #include "iphox/ipc/Protocol.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <stop_token>
 #include <string>
 
@@ -28,7 +29,7 @@ public:
         std::stop_token stopToken = {});
 
 private:
-    [[nodiscard]] static std::string Fingerprint(
+    [[nodiscard]] static std::optional<std::string> Fingerprint(
         const ipc::Frame& request);
 
     [[nodiscard]] static ipc::Frame MakeResponse(
