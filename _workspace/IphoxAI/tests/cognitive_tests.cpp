@@ -1,12 +1,16 @@
+#include "iphox/capability/CapabilityAuthority.hpp"
 #include "iphox/cognitive/BaselineDecisionBackend.hpp"
 #include "iphox/cognitive/DecisionValidator.hpp"
 #include "iphox/cognitive/StateProjection.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
+#include "iphox/foundation/RequestRegistry.hpp"
+#include "iphox/rpc/RpcAuthority.hpp"
 
 #include <cassert>
 #include <iostream>
 #include <stop_token>
 #include <stdexcept>
+#include <string>
 
 using namespace iphox::cognitive;
 
@@ -42,6 +46,20 @@ DecisionRequest MakeRequest() {
     request.questions.emplace("complexity", std::move(complexity));
 
     return request;
+}
+
+DecisionReceipt MakeAcceptedReceipt() {
+    DecisionReceipt receipt;
+    receipt.requestId = 77;
+    receipt.schemaId = "test";
+    receipt.schemaVersion = 1;
+    receipt.backendId = "test";
+    receipt.backendModel = "test";
+    receipt.stateFingerprint = "state-A";
+    receipt.bodyPolicyFingerprint = "body-A";
+    receipt.route = DecisionRoute::Deterministic;
+    receipt.accepted = true;
+    return receipt;
 }
 
 void TestDeterministicHappyPath() {
@@ -114,10 +132,8 @@ void TestInvalidProbabilityRejected() {
     response.backendId = "test";
     response.backendModel = "test";
     response.answers["needs_memory"] = NoulAnswer{1.4};
-    response.answers["intent"] =
-        AbstainAnswer{"test"};
-    response.answers["complexity"] =
-        AbstainAnswer{"test"};
+    response.answers["intent"] = AbstainAnswer{"test"};
+    response.answers["complexity"] = AbstainAnswer{"test"};
 
     const auto validation =
         DecisionValidator::ValidateResponse(
@@ -150,6 +166,101 @@ void TestCancellationFailsClosed() {
     assert(result.receipt.route == DecisionRoute::Abstain);
 }
 
+void TestRequestIdempotencyAndConflict() {
+    iphox::foundation::RequestRegistry registry{8};
+
+    assert(
+        registry.Register(42, "ABC") ==
+        iphox::foundation::RegisterResult::NewRequest);
+
+    assert(
+        registry.Register(42, "ABC") ==
+        iphox::foundation::RegisterResult::Duplicate);
+
+    assert(
+        registry.Register(42, "XYZ") ==
+        iphox::foundation::RegisterResult::Conflict);
+
+    registry.MarkCompleted(42);
+
+    const auto found = registry.Find(42);
+    assert(found.has_value());
+    assert(found->completed);
+}
+
+class EchoController final : public iphox::rpc::IDomainController {
+public:
+    iphox::rpc::RpcResult Handle(
+        const iphox::rpc::RpcRequest& request) override {
+
+        return {true, "OK", request.method};
+    }
+};
+
+void TestRpcFailClosed() {
+    iphox::rpc::DomainDispatcher dispatcher;
+    EchoController chat;
+
+    dispatcher.Bind(iphox::rpc::Domain::Chat, chat);
+
+    auto unknown = dispatcher.Dispatch({
+        .requestId = 1,
+        .method = "made-up:thing",
+        .payload = {}
+    });
+    assert(!unknown.ok);
+    assert(unknown.code == "UNKNOWN_RPC");
+
+    auto unavailable = dispatcher.Dispatch({
+        .requestId = 2,
+        .method = "memory:query",
+        .payload = {}
+    });
+    assert(!unavailable.ok);
+    assert(unavailable.code == "DOMAIN_UNAVAILABLE");
+
+    auto handled = dispatcher.Dispatch({
+        .requestId = 3,
+        .method = "chat:submit",
+        .payload = {}
+    });
+    assert(handled.ok);
+    assert(handled.code == "OK");
+}
+
+void TestCapabilityAuthorityFailsClosed() {
+    auto receipt = MakeAcceptedReceipt();
+
+    const auto unavailable =
+        iphox::capability::CapabilityAuthority::Authorize(
+            receipt,
+            "state-A",
+            {"filesystem.read", "project"});
+
+    assert(!unavailable.allowed);
+    assert(unavailable.code == "POLICY_UNAVAILABLE");
+
+    const auto stale =
+        iphox::capability::CapabilityAuthority::Authorize(
+            receipt,
+            "state-B",
+            {"filesystem.read", "project"});
+
+    assert(!stale.allowed);
+    assert(stale.code == "STALE_DECISION");
+
+    receipt.accepted = false;
+
+    const auto rejected =
+        iphox::capability::CapabilityAuthority::Authorize(
+            receipt,
+            "state-A",
+            {"filesystem.read", "project"});
+
+    assert(!rejected.allowed);
+    assert(rejected.code == "DECISION_NOT_ACCEPTED");
+}
+
 } // namespace
 
 int main() {
@@ -158,7 +269,10 @@ int main() {
     TestStateProjectionAllowList();
     TestInvalidProbabilityRejected();
     TestCancellationFailsClosed();
+    TestRequestIdempotencyAndConflict();
+    TestRpcFailClosed();
+    TestCapabilityAuthorityFailsClosed();
 
-    std::cout << "IphoxAI cognitive baseline tests: PASS\n";
+    std::cout << "IphoxAI native core baseline tests: PASS\n";
     return 0;
 }
