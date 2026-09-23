@@ -13,7 +13,8 @@ namespace iphox::foundation {
 enum class RegisterResult : std::uint8_t {
     NewRequest,
     Duplicate,
-    Conflict
+    Conflict,
+    CapacityExhausted
 };
 
 struct RequestSnapshot {
@@ -38,7 +39,7 @@ public:
     [[nodiscard]] std::size_t Size() const;
 
 private:
-    void EvictIfNeeded();
+    [[nodiscard]] bool EvictOneCompleted();
 
     std::size_t capacity_;
     mutable std::mutex mutex_;
