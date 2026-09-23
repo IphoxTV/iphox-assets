@@ -5,24 +5,27 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(iphox_cognitive STATIC
+add_library(iphox_core STATIC
     src/cognitive/BaselineDecisionBackend.cpp
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
+    src/foundation/RequestRegistry.cpp
+    src/rpc/RpcAuthority.cpp
+    src/capability/CapabilityAuthority.cpp
 )
 
-target_include_directories(iphox_cognitive PUBLIC include)
+target_include_directories(iphox_core PUBLIC include)
 
 if(MSVC)
-    target_compile_options(iphox_cognitive PRIVATE /W4 /permissive- /EHsc)
+    target_compile_options(iphox_core PRIVATE /W4 /permissive- /EHsc)
 else()
-    target_compile_options(iphox_cognitive PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(iphox_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_executable(iphox_cognitive_tests
+add_executable(iphox_core_tests
     tests/cognitive_tests.cpp
 )
-target_link_libraries(iphox_cognitive_tests PRIVATE iphox_cognitive)
+target_link_libraries(iphox_core_tests PRIVATE iphox_core)
 
 enable_testing()
-add_test(NAME iphox_cognitive_tests COMMAND iphox_cognitive_tests)
+add_test(NAME iphox_core_tests COMMAND iphox_core_tests)
