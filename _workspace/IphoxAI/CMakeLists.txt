@@ -27,6 +27,7 @@ add_library(iphox_core STATIC
 )
 
 target_include_directories(iphox_core PUBLIC include)
+target_compile_definitions(iphox_core PUBLIC NOMINMAX)
 target_link_libraries(iphox_core PUBLIC advapi32 bcrypt winhttp)
 
 if(MSVC)
