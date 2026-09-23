@@ -2,12 +2,12 @@
 
 #include "iphox/ipc/Payload.hpp"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 namespace iphox::core {
 namespace {
@@ -170,7 +170,7 @@ HandleResult CoreService::Handle(
     }
 
     try {
-        requests_.MarkCompleted(
+        (void)requests_.MarkCompleted(
             request.header.requestId,
             ipc::Protocol::Encode(
                 result.response));
