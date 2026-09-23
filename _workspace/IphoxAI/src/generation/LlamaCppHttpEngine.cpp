@@ -249,7 +249,7 @@ GenerationResult LlamaCppHttpEngine::Generate(
         ",\"stream\":false}";
 
     if (body.size() >
-        std::numeric_limits<DWORD>::max()) {
+        (std::numeric_limits<DWORD>::max)()) {
         return Failed(
             "LLAMA_REQUEST_TOO_LARGE");
     }
