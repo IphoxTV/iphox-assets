@@ -9,6 +9,7 @@
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
 #include "iphox/foundation/Sha256.hpp"
+#include "iphox/foundation/TextEncoding.hpp"
 #include "iphox/foundation/JsonLite.hpp"
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
 #include "iphox/generation/UnavailableGenerativeEngine.hpp"
@@ -920,6 +921,34 @@ void TestRuntimeConfigDefaultsAndValidation() {
     assert(!duplicate.valid);
 }
 
+
+void TestStrictTextEncodingRoundTrip() {
+    const std::string utf8 =
+        "IphoxAI â¬ ð";
+
+    const auto wide =
+        iphox::foundation::Utf8ToWide(
+            utf8);
+
+    assert(wide.has_value());
+
+    const auto roundTrip =
+        iphox::foundation::WideToUtf8(
+            *wide);
+
+    assert(roundTrip.has_value());
+    assert(*roundTrip == utf8);
+
+    const std::string invalid{
+        static_cast<char>(0xC0),
+        static_cast<char>(0xAF)
+    };
+
+    assert(
+        !iphox::foundation::Utf8ToWide(
+            invalid).has_value());
+}
+
 } // namespace
 
 int main() {
@@ -947,6 +976,7 @@ int main() {
     TestLlamaHostRestriction();
     TestCoreServiceCompletedChatPath();
     TestRuntimeConfigDefaultsAndValidation();
+    TestStrictTextEncodingRoundTrip();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
