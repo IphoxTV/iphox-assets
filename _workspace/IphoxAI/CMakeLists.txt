@@ -9,6 +9,7 @@ add_library(iphox_core STATIC
     src/cognitive/BaselineDecisionBackend.cpp
     src/cognitive/DecisionValidator.cpp
     src/cognitive/Supervisor.cpp
+    src/foundation/CoreLifecycle.cpp
     src/foundation/RequestRegistry.cpp
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
