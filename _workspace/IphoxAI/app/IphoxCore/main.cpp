@@ -1,5 +1,6 @@
 #include "iphox/core/CoreService.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
+#include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
 
 #include <chrono>
@@ -22,7 +23,8 @@ int wmain() {
         return 11;
     }
 
-    iphox::core::CoreService service{1024};
+    iphox::generation::UnavailableGenerativeEngine engine;
+    iphox::core::CoreService service{engine, 1024};
 
     if (!lifecycle.MarkReady()) {
         lifecycle.MarkFaulted();
