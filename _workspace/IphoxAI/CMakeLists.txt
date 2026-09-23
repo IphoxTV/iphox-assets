@@ -14,7 +14,9 @@ add_library(iphox_core STATIC
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
     src/ipc/Protocol.cpp
+    src/ipc/SecurePipeClient.cpp
     src/ipc/SecurePipeServer.cpp
+    src/runtime/CoreProcessHost.cpp
 )
 
 target_include_directories(iphox_core PUBLIC include)
