@@ -1,6 +1,7 @@
 #include "iphox/cognitive/Supervisor.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace iphox::cognitive {
 
@@ -43,22 +44,16 @@ SupervisorResult Supervisor::Evaluate(
         };
     }
 
-    bool anyAbstain = false;
     for (const auto& [_, answer] : receipt.response.answers) {
         if (std::holds_alternative<AbstainAnswer>(answer)) {
-            anyAbstain = true;
-            break;
+            receipt.route = DecisionRoute::Abstain;
+            receipt.accepted = false;
+            return {
+                .receipt = std::move(receipt),
+                .requiresGeneration = true,
+                .requiresMemory = false
+            };
         }
-    }
-
-    if (anyAbstain) {
-        receipt.route = DecisionRoute::Abstain;
-        receipt.accepted = false;
-        return {
-            .receipt = std::move(receipt),
-            .requiresGeneration = true,
-            .requiresMemory = false
-        };
     }
 
     receipt.route = DecisionRoute::Deterministic;
