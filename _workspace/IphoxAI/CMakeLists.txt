@@ -14,9 +14,11 @@ add_library(iphox_core STATIC
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
     src/ipc/Protocol.cpp
+    src/ipc/SecurePipeServer.cpp
 )
 
 target_include_directories(iphox_core PUBLIC include)
+target_link_libraries(iphox_core PUBLIC advapi32)
 
 if(MSVC)
     target_compile_options(iphox_core PRIVATE /W4 /permissive- /EHsc)
