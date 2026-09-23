@@ -84,7 +84,7 @@ std::optional<Sha256Digest> Sha256(
     if (!bytes.empty()) {
         if (bytes.size() >
             static_cast<std::size_t>(
-                std::numeric_limits<ULONG>::max())) {
+                (std::numeric_limits<ULONG>::max)())) {
             ok = false;
         } else if (!NtSuccess(BCryptHashData(
                        hash,
