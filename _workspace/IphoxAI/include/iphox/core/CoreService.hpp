@@ -1,5 +1,6 @@
 #pragma once
 
+#include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
 #include "iphox/generation/IGenerativeEngine.hpp"
 #include "iphox/ipc/Protocol.hpp"
@@ -19,6 +20,7 @@ class CoreService final {
 public:
     CoreService(
         generation::IGenerativeEngine& engine,
+        cognitive::Supervisor& supervisor,
         std::size_t requestCapacity = 1024);
 
     [[nodiscard]] HandleResult Handle(
@@ -38,6 +40,7 @@ private:
         std::string code);
 
     generation::IGenerativeEngine& engine_;
+    cognitive::Supervisor& supervisor_;
     foundation::RequestRegistry requests_;
 };
 
