@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LlamaCppHttpEngine.hpp"
+#include "iphox/generation/LlamaCppHttpEngine.hpp"
 
 #include <filesystem>
 #include <string>
