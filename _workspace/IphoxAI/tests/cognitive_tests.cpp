@@ -8,6 +8,7 @@
 #include "iphox/core/CoreService.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
+#include "iphox/foundation/Sha256.hpp"
 #include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
@@ -735,6 +736,29 @@ void TestCoreServiceRejectsMalformedDecisionPayload() {
         "INVALID_DECISION_PAYLOAD");
 }
 
+
+void TestSha256KnownVector() {
+    const std::string input = "abc";
+
+    std::vector<std::byte> bytes;
+    bytes.reserve(input.size());
+
+    for (const unsigned char ch : input) {
+        bytes.push_back(
+            static_cast<std::byte>(ch));
+    }
+
+    const auto digest =
+        iphox::foundation::Sha256(bytes);
+
+    assert(digest.has_value());
+
+    assert(
+        iphox::foundation::Hex(*digest) ==
+        "ba7816bf8f01cfea414140de5dae2223"
+        "b00361a396177a9cb410ff61f20015ad");
+}
+
 } // namespace
 
 int main() {
@@ -757,6 +781,7 @@ int main() {
     TestDecisionCodecRoundTrip();
     TestCoreServiceDecisionEvaluate();
     TestCoreServiceRejectsMalformedDecisionPayload();
+    TestSha256KnownVector();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
