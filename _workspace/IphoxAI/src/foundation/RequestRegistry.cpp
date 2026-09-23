@@ -24,6 +24,12 @@ RegisterResult RequestRegistry::Register(
             : RegisterResult::Conflict;
     }
 
+    while (records_.size() >= capacity_) {
+        if (!EvictOneCompleted()) {
+            return RegisterResult::CapacityExhausted;
+        }
+    }
+
     order_.push_back(requestId);
     records_.emplace(
         requestId,
@@ -33,7 +39,6 @@ RegisterResult RequestRegistry::Register(
             .completed = false
         });
 
-    EvictIfNeeded();
     return RegisterResult::NewRequest;
 }
 
@@ -62,25 +67,27 @@ std::size_t RequestRegistry::Size() const {
     return records_.size();
 }
 
-void RequestRegistry::EvictIfNeeded() {
-    while (records_.size() > capacity_ && !order_.empty()) {
-        const auto oldest = order_.front();
+bool RequestRegistry::EvictOneCompleted() {
+    const auto count = order_.size();
+
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto requestId = order_.front();
         order_.pop_front();
 
-        const auto it = records_.find(oldest);
+        const auto it = records_.find(requestId);
         if (it == records_.end()) {
             continue;
         }
 
-        if (!it->second.completed) {
-            // Active requests must never be evicted. Put it back and stop;
-            // boundedness resumes as requests complete.
-            order_.push_back(oldest);
-            break;
+        if (it->second.completed) {
+            records_.erase(it);
+            return true;
         }
 
-        records_.erase(it);
+        order_.push_back(requestId);
     }
+
+    return false;
 }
 
 } // namespace iphox::foundation
