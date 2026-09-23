@@ -2,6 +2,7 @@
 #define _UNICODE
 #define WIN32_LEAN_AND_MEAN
 
+#include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/SecurePipeClient.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
 #include "iphox/runtime/CoreProcessHost.hpp"
@@ -369,12 +370,36 @@ private:
             return;
         }
 
+        iphox::ipc::Frame hello;
+        hello.header.type = iphox::ipc::MessageType::Hello;
+        hello.header.requestId = nextRequestId_++;
+
+        if (!coreClient_.WriteFrame(hello)) {
+            coreStatus_ = L"IphoxCore: hello write fallito";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        const auto helloAck = coreClient_.ReadFrame();
+
+        if (!helloAck.has_value() ||
+            helloAck->header.type != iphox::ipc::MessageType::Hello ||
+            (helloAck->header.flags & iphox::ipc::kFlagResponse) == 0 ||
+            (helloAck->header.flags & iphox::ipc::kFlagError) != 0) {
+            coreStatus_ = L"IphoxCore: hello non valido";
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+
+        const auto identity =
+            iphox::ipc::FromPayload(helloAck->payload);
+
         iphox::ipc::Frame ping;
         ping.header.type = iphox::ipc::MessageType::Ping;
         ping.header.requestId = nextRequestId_++;
 
         if (!coreClient_.WriteFrame(ping)) {
-            coreStatus_ = L"IphoxCore: handshake write fallito";
+            coreStatus_ = L"IphoxCore: ping write fallito";
             InvalidateRect(hwnd_, nullptr, FALSE);
             return;
         }
@@ -383,14 +408,19 @@ private:
 
         if (!pong.has_value() ||
             pong->header.type != iphox::ipc::MessageType::Pong ||
-            (pong->header.flags & iphox::ipc::kFlagResponse) == 0) {
-            coreStatus_ = L"IphoxCore: handshake non valido";
+            (pong->header.flags & iphox::ipc::kFlagResponse) == 0 ||
+            (pong->header.flags & iphox::ipc::kFlagError) != 0) {
+            coreStatus_ = L"IphoxCore: ping/pong non valido";
             InvalidateRect(hwnd_, nullptr, FALSE);
             return;
         }
 
         coreReady_ = true;
-        coreStatus_ = L"IphoxCore connesso · Native C++";
+
+        coreStatus_ =
+            identity == "IphoxCore Native R0"
+            ? L"IphoxCore connesso · Native C++"
+            : L"IphoxCore connesso · identità inattesa";
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
