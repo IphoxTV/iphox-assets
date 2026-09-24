@@ -3,6 +3,7 @@
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
+#include "iphox/runtime/FileLogger.hpp"
 #include "iphox/runtime/LlamaServerProcessHost.hpp"
 #include "iphox/runtime/Paths.hpp"
 #include "iphox/runtime/RuntimeConfig.hpp"
@@ -32,14 +33,35 @@ int wmain() {
     const auto root =
         iphox::runtime::ExecutableDirectory();
 
+    iphox::runtime::FileLogger logger{
+        root / L"logs" / L"IphoxCore.log"
+    };
+
+    logger.Write(
+        iphox::runtime::LogLevel::Info,
+        "IphoxCore starting");
+
     const auto runtimeConfig =
         iphox::runtime::RuntimeConfigLoader::Load(
             root / L"IphoxAI.config");
 
     if (!runtimeConfig.valid) {
+        for (const auto& issue :
+             runtimeConfig.issues) {
+            logger.Write(
+                iphox::runtime::LogLevel::Error,
+                "config: " + issue);
+        }
+
         lifecycle.MarkFaulted();
         return 16;
     }
+
+    logger.Write(
+        iphox::runtime::LogLevel::Info,
+        runtimeConfig.fileFound
+            ? "runtime config loaded"
+            : "runtime config missing; defaults active");
 
     iphox::generation::LlamaCppHttpEngine engine{
         runtimeConfig.config.llama
@@ -51,10 +73,15 @@ int wmain() {
     std::jthread llamaStartupThread;
 
     if (runtimeConfig.config.server.autostart) {
+        logger.Write(
+            iphox::runtime::LogLevel::Info,
+            "llama-server autostart enabled");
+
         llamaStartupThread =
             std::jthread(
                 [&engine,
                  &ownedLlamaServer,
+                 &logger,
                  root,
                  config = runtimeConfig.config](
                     std::stop_token stopToken) {
@@ -66,6 +93,10 @@ int wmain() {
                     if (initial.status ==
                         iphox::generation::
                             EngineStatus::Ready) {
+
+                        logger.Write(
+                            iphox::runtime::LogLevel::Info,
+                            "llama.cpp already ready; autostart skipped");
                         return;
                     }
 
@@ -96,8 +127,16 @@ int wmain() {
 
                     if (!ownedLlamaServer.Start(
                             launch)) {
+
+                        logger.Write(
+                            iphox::runtime::LogLevel::Error,
+                            "llama-server autostart failed");
                         return;
                     }
+
+                    logger.Write(
+                        iphox::runtime::LogLevel::Info,
+                        "owned llama-server started");
 
                     const auto deadline =
                         std::chrono::
@@ -121,6 +160,10 @@ int wmain() {
                         if (probe.status ==
                             iphox::generation::
                                 EngineStatus::Ready) {
+
+                            logger.Write(
+                                iphox::runtime::LogLevel::Info,
+                                "owned llama-server ready");
                             return;
                         }
 
@@ -146,6 +189,10 @@ int wmain() {
         lifecycle.MarkFaulted();
         return 12;
     }
+
+    logger.Write(
+        iphox::runtime::LogLevel::Info,
+        "IphoxCore ready");
 
     std::wcout
         << L"IphoxCore Native R0 READY\n"
@@ -196,6 +243,10 @@ int wmain() {
 
         pipe.Disconnect();
     }
+
+    logger.Write(
+        iphox::runtime::LogLevel::Info,
+        "IphoxCore stopping");
 
     if (llamaStartupThread.joinable()) {
         llamaStartupThread.request_stop();
