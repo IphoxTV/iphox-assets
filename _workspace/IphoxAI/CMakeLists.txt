@@ -19,6 +19,7 @@ add_library(iphox_core STATIC
     src/foundation/Sha256.cpp
     src/foundation/TextEncoding.cpp
     src/generation/LlamaCppHttpEngine.cpp
+    src/generation/LlamaCppWire.cpp
     src/generation/UnavailableGenerativeEngine.cpp
     src/rpc/RpcAuthority.cpp
     src/capability/CapabilityAuthority.cpp
