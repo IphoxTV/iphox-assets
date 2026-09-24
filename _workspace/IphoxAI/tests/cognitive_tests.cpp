@@ -917,7 +917,10 @@ void TestRuntimeConfigDefaultsAndValidation() {
             "runtime.host=localhost\n"
             "runtime.port=18080\n"
             "runtime.n_predict=768\n"
-            "runtime.connect_timeout_ms=2500\n");
+            "runtime.connect_timeout_ms=2500\n"
+            "chat.max_turns=12\n"
+            "chat.max_bytes=32768\n"
+            "chat.system_prompt=Custom Iphox prompt\n");
 
     assert(configured.valid);
     assert(
@@ -932,6 +935,23 @@ void TestRuntimeConfigDefaultsAndValidation() {
     assert(
         configured.config.llama.connectTimeoutMs ==
         2500);
+    assert(
+        configured.config.chat.maxTurns ==
+        12);
+    assert(
+        configured.config.chat.maxBytes ==
+        32768);
+    assert(
+        configured.config.chat.systemPrompt ==
+        "Custom Iphox prompt");
+
+    const auto invalidChat =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "chat.max_turns=0\n"
+            "chat.max_bytes=12\n"
+            "chat.system_prompt=\n");
+
+    assert(!invalidChat.valid);
 
     const auto remote =
         iphox::runtime::RuntimeConfigLoader::Parse(
