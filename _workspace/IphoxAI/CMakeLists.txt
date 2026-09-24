@@ -25,6 +25,7 @@ add_library(iphox_core STATIC
     src/ipc/SecurePipeClient.cpp
     src/ipc/SecurePipeServer.cpp
     src/runtime/CoreProcessHost.cpp
+    src/runtime/CoreRpcClient.cpp
     src/runtime/Paths.cpp
     src/runtime/RuntimeConfig.cpp
 )
