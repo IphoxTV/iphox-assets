@@ -19,6 +19,7 @@
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
 #include "iphox/runtime/RuntimeConfig.hpp"
+#include "iphox/runtime/FileLogger.hpp"
 #include "iphox/runtime/LlamaServerProcessHost.hpp"
 #include "iphox/runtime/Paths.hpp"
 
@@ -1354,6 +1355,56 @@ void TestChatClearResetsCoreConversation() {
         "after-clear");
 }
 
+
+void TestFileLoggerIsBoundedAndRotates() {
+    const auto root =
+        std::filesystem::temp_directory_path() /
+        L"iphoxai_native_r0_logger_test";
+
+    std::error_code ec;
+    std::filesystem::remove_all(
+        root,
+        ec);
+
+    const auto path =
+        root /
+        L"IphoxCore.log";
+
+    {
+        iphox::runtime::FileLogger logger{
+            path,
+            256
+        };
+
+        assert(logger.Enabled());
+
+        for (int i = 0; i < 20; ++i) {
+            logger.Write(
+                iphox::runtime::LogLevel::Info,
+                "line with enough text to force rotation");
+        }
+    }
+
+    assert(
+        std::filesystem::exists(
+            path));
+
+    auto backup = path;
+    backup += L".1";
+
+    assert(
+        std::filesystem::exists(
+            backup));
+
+    assert(
+        std::filesystem::file_size(
+            path) <= 256);
+
+    std::filesystem::remove_all(
+        root,
+        ec);
+}
+
 } // namespace
 
 int main() {
@@ -1389,6 +1440,7 @@ int main() {
     TestLlamaCppWireUsesTypedRoles();
     TestPortableRuntimePathsAndAutostartConfig();
     TestChatClearResetsCoreConversation();
+    TestFileLoggerIsBoundedAndRotates();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
