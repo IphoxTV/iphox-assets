@@ -189,6 +189,15 @@ HandleResult CoreService::Handle(
     }
 
 
+    case ipc::MessageType::ChatClear:
+        conversation_.Clear();
+
+        result.response =
+            MakeResponse(
+                request,
+                ipc::MessageType::ChatClear);
+        break;
+
     case ipc::MessageType::ChatSubmit: {
         const auto chat =
             chat::ChatCodec::Decode(
