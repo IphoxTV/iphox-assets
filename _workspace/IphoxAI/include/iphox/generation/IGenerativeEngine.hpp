@@ -2,6 +2,7 @@
 
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace iphox::generation {
 
@@ -19,13 +20,24 @@ enum class EngineStatus {
     Failed
 };
 
+enum class GenerationRole {
+    System,
+    User,
+    Assistant
+};
+
+struct GenerationMessage {
+    GenerationRole role{GenerationRole::User};
+    std::string text;
+};
+
 struct EngineProbeResult {
     EngineStatus status{EngineStatus::Failed};
     std::string detail;
 };
 
 struct GenerationRequest {
-    std::string prompt;
+    std::vector<GenerationMessage> messages;
 };
 
 struct GenerationResult {
