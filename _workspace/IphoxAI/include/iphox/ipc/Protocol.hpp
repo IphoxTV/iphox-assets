@@ -31,6 +31,7 @@ enum class MessageType : std::uint16_t {
     ChatSubmit = 100,
     ChatStatus = 101,
     ChatCancel = 102,
+    ChatClear = 103,
 
     BodyStatus = 200,
     BodyVerify = 201,
