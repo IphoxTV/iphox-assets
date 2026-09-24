@@ -12,6 +12,18 @@ enum class GenerationStatus {
     Failed
 };
 
+enum class EngineStatus {
+    Ready,
+    Loading,
+    Unavailable,
+    Failed
+};
+
+struct EngineProbeResult {
+    EngineStatus status{EngineStatus::Failed};
+    std::string detail;
+};
+
 struct GenerationRequest {
     std::string prompt;
 };
@@ -25,6 +37,9 @@ struct GenerationResult {
 class IGenerativeEngine {
 public:
     virtual ~IGenerativeEngine() = default;
+
+    [[nodiscard]] virtual EngineProbeResult Probe(
+        std::stop_token stopToken) = 0;
 
     [[nodiscard]] virtual GenerationResult Generate(
         const GenerationRequest& request,
