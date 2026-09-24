@@ -2,6 +2,7 @@
 
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -9,8 +10,20 @@
 
 namespace iphox::runtime {
 
+struct ChatRuntimeConfig {
+    std::size_t maxTurns{24};
+    std::size_t maxBytes{64u * 1024u};
+
+    std::string systemPrompt{
+        "You are IphoxAI, a local native AI assistant. "
+        "Answer the latest user message directly and keep continuity "
+        "with the available conversation history."
+    };
+};
+
 struct RuntimeConfig {
     generation::LlamaCppHttpConfig llama;
+    ChatRuntimeConfig chat;
 };
 
 struct RuntimeConfigResult {
