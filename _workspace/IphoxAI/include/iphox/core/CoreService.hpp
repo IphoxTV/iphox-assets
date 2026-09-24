@@ -1,5 +1,6 @@
 #pragma once
 
+#include "iphox/chat/ConversationHistory.hpp"
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/RequestRegistry.hpp"
 #include "iphox/generation/IGenerativeEngine.hpp"
@@ -42,6 +43,7 @@ private:
 
     generation::IGenerativeEngine& engine_;
     cognitive::Supervisor& supervisor_;
+    chat::ConversationHistory conversation_;
     foundation::RequestRegistry requests_;
 };
 
