@@ -3,6 +3,7 @@
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -21,8 +22,22 @@ struct ChatRuntimeConfig {
     };
 };
 
+struct LlamaServerRuntimeConfig {
+    bool autostart{};
+    std::filesystem::path serverPath{
+        L"runtime\\llama-server.exe"
+    };
+    std::filesystem::path modelPath{
+        L"models\\model.gguf"
+    };
+    std::uint32_t contextSize{8192};
+    std::wstring gpuLayers{L"auto"};
+    std::uint32_t startupTimeoutMs{120000};
+};
+
 struct RuntimeConfig {
     generation::LlamaCppHttpConfig llama;
+    LlamaServerRuntimeConfig server;
     ChatRuntimeConfig chat;
 };
 
