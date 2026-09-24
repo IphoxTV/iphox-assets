@@ -97,6 +97,21 @@ std::string StatusCodeError(
         std::to_string(status);
 }
 
+const char* RoleName(
+    GenerationRole role) noexcept {
+
+    switch (role) {
+    case GenerationRole::System:
+        return "system";
+    case GenerationRole::User:
+        return "user";
+    case GenerationRole::Assistant:
+        return "assistant";
+    }
+
+    return "user";
+}
+
 bool ReadBody(
     HINTERNET request,
     std::string& body,
@@ -387,7 +402,7 @@ GenerationResult LlamaCppHttpEngine::Generate(
         WinHttpOpenRequest(
             connection.Get(),
             L"POST",
-            L"/completion",
+            L"/v1/chat/completions",
             nullptr,
             WINHTTP_NO_REFERER,
             acceptTypes,
@@ -399,15 +414,40 @@ GenerationResult LlamaCppHttpEngine::Generate(
             "LLAMA_REQUEST_OPEN_FAILED");
     }
 
-    const auto prompt =
-        foundation::JsonEscape(
-            request.prompt);
+    if (request.messages.empty()) {
+        return Failed(
+            "EMPTY_GENERATION_REQUEST");
+    }
 
-    const std::string body =
-        "{\"prompt\":\"" +
-        prompt +
-        "\",\"n_predict\":" +
-        std::to_string(config_.nPredict) +
+    std::string body =
+        "{\"messages\":[";
+
+    bool first = true;
+
+    for (const auto& message :
+         request.messages) {
+
+        if (!first) {
+            body += ",";
+        }
+
+        first = false;
+
+        body +=
+            "{\"role\":\"" +
+            std::string{
+                RoleName(message.role)
+            } +
+            "\",\"content\":\"" +
+            foundation::JsonEscape(
+                message.text) +
+            "\"}";
+    }
+
+    body +=
+        "],\"max_tokens\":" +
+        std::to_string(
+            config_.nPredict) +
         ",\"stream\":false}";
 
     if (body.size() >
