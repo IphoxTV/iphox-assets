@@ -175,6 +175,7 @@ bool Protocol::IsKnownType(MessageType type) noexcept {
     case MessageType::ChatSubmit:
     case MessageType::ChatStatus:
     case MessageType::ChatCancel:
+    case MessageType::ChatClear:
     case MessageType::BodyStatus:
     case MessageType::BodyVerify:
     case MessageType::DecisionEvaluate:
