@@ -295,6 +295,53 @@ RuntimeConfigResult RuntimeConfigLoader::Parse(
                     "invalid receive timeout");
             }
 
+        } else if (key == "chat.max_turns") {
+            std::uint32_t maxTurns{};
+
+            if (!ParseUnsigned<std::uint32_t>(
+                    value,
+                    1,
+                    256,
+                    maxTurns)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid chat.max_turns");
+            } else {
+                result.config.chat.maxTurns =
+                    static_cast<std::size_t>(
+                        maxTurns);
+            }
+
+        } else if (key == "chat.max_bytes") {
+            std::uint32_t maxBytes{};
+
+            if (!ParseUnsigned<std::uint32_t>(
+                    value,
+                    1024,
+                    4u * 1024u * 1024u,
+                    maxBytes)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid chat.max_bytes");
+            } else {
+                result.config.chat.maxBytes =
+                    static_cast<std::size_t>(
+                        maxBytes);
+            }
+
+        } else if (key == "chat.system_prompt") {
+            if (value.empty()) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "chat.system_prompt cannot be empty");
+            } else {
+                result.config.chat.systemPrompt =
+                    value;
+            }
+
         } else {
             // Forward-compatible: unknown keys are ignored.
         }
