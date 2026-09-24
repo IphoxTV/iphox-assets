@@ -3,12 +3,14 @@
 #include "iphox/cognitive/Supervisor.hpp"
 #include "iphox/foundation/CoreLifecycle.hpp"
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
+#include "iphox/runtime/LlamaServerProcessHost.hpp"
 #include "iphox/runtime/Paths.hpp"
 #include "iphox/runtime/RuntimeConfig.hpp"
 #include "iphox/ipc/SecurePipeServer.hpp"
 
 #include <chrono>
 #include <iostream>
+#include <thread>
 
 int wmain() {
     using namespace std::chrono_literals;
@@ -42,6 +44,92 @@ int wmain() {
     iphox::generation::LlamaCppHttpEngine engine{
         runtimeConfig.config.llama
     };
+
+    iphox::runtime::LlamaServerProcessHost
+        ownedLlamaServer;
+
+    std::jthread llamaStartupThread;
+
+    if (runtimeConfig.config.server.autostart) {
+        llamaStartupThread =
+            std::jthread(
+                [&engine,
+                 &ownedLlamaServer,
+                 root,
+                 config = runtimeConfig.config](
+                    std::stop_token stopToken) {
+
+                    const auto initial =
+                        engine.Probe(
+                            stopToken);
+
+                    if (initial.status ==
+                        iphox::generation::
+                            EngineStatus::Ready) {
+                        return;
+                    }
+
+                    iphox::runtime::
+                        LlamaServerLaunchConfig
+                            launch;
+
+                    launch.serverPath =
+                        iphox::runtime::
+                            ResolvePortablePath(
+                                root,
+                                config.server.serverPath);
+
+                    launch.modelPath =
+                        iphox::runtime::
+                            ResolvePortablePath(
+                                root,
+                                config.server.modelPath);
+
+                    launch.port =
+                        config.llama.port;
+
+                    launch.contextSize =
+                        config.server.contextSize;
+
+                    launch.gpuLayers =
+                        config.server.gpuLayers;
+
+                    if (!ownedLlamaServer.Start(
+                            launch)) {
+                        return;
+                    }
+
+                    const auto deadline =
+                        std::chrono::
+                            steady_clock::now() +
+                        std::chrono::milliseconds{
+                            config.server.
+                                startupTimeoutMs
+                        };
+
+                    while (!stopToken.stop_requested() &&
+                           std::chrono::
+                               steady_clock::now() <
+                               deadline &&
+                           ownedLlamaServer.
+                               IsRunning()) {
+
+                        const auto probe =
+                            engine.Probe(
+                                stopToken);
+
+                        if (probe.status ==
+                            iphox::generation::
+                                EngineStatus::Ready) {
+                            return;
+                        }
+
+                        std::this_thread::sleep_for(
+                            std::chrono::
+                                milliseconds{250});
+                    }
+                });
+    }
 
     iphox::cognitive::BaselineDecisionBackend decisions;
     iphox::cognitive::Supervisor supervisor{decisions};
@@ -107,6 +195,11 @@ int wmain() {
         }
 
         pipe.Disconnect();
+    }
+
+    if (llamaStartupThread.joinable()) {
+        llamaStartupThread.request_stop();
+        llamaStartupThread.join();
     }
 
     if (!lifecycle.WaitForDrain(2s)) {
