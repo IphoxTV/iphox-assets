@@ -75,6 +75,50 @@ bool ParseUnsigned(
     return true;
 }
 
+bool ParseBool(
+    const std::string& text,
+    bool& output) {
+
+    if (text == "1" ||
+        text == "true" ||
+        text == "on" ||
+        text == "yes") {
+        output = true;
+        return true;
+    }
+
+    if (text == "0" ||
+        text == "false" ||
+        text == "off" ||
+        text == "no") {
+        output = false;
+        return true;
+    }
+
+    return false;
+}
+
+bool IsGpuLayersValue(
+    const std::string& value) {
+
+    if (value == "auto" ||
+        value == "all") {
+        return true;
+    }
+
+    if (value.empty()) {
+        return false;
+    }
+
+    for (const unsigned char ch : value) {
+        if (!std::isdigit(ch)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool ParseInt(
     const std::string& text,
     int minimum,
@@ -293,6 +337,113 @@ RuntimeConfigResult RuntimeConfigLoader::Parse(
                     result,
                     lineNumber,
                     "invalid receive timeout");
+            }
+
+        } else if (key == "runtime.autostart") {
+            bool enabled{};
+
+            if (!ParseBool(
+                    value,
+                    enabled)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.autostart");
+            } else {
+                result.config.server.autostart =
+                    enabled;
+            }
+
+        } else if (key == "runtime.server_path") {
+            const auto wide =
+                foundation::Utf8ToWide(value);
+
+            if (!wide.has_value() ||
+                wide->empty()) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.server_path");
+            } else {
+                result.config.server.serverPath =
+                    std::filesystem::path{
+                        *wide
+                    };
+            }
+
+        } else if (key == "runtime.model_path") {
+            const auto wide =
+                foundation::Utf8ToWide(value);
+
+            if (!wide.has_value() ||
+                wide->empty()) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.model_path");
+            } else {
+                result.config.server.modelPath =
+                    std::filesystem::path{
+                        *wide
+                    };
+            }
+
+        } else if (key == "runtime.ctx_size") {
+            std::uint32_t contextSize{};
+
+            if (!ParseUnsigned<std::uint32_t>(
+                    value,
+                    512,
+                    1024u * 1024u,
+                    contextSize)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.ctx_size");
+            } else {
+                result.config.server.contextSize =
+                    contextSize;
+            }
+
+        } else if (key == "runtime.gpu_layers") {
+            if (!IsGpuLayersValue(value)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.gpu_layers");
+            } else {
+                const auto wide =
+                    foundation::Utf8ToWide(value);
+
+                if (!wide.has_value()) {
+                    Issue(
+                        result,
+                        lineNumber,
+                        "invalid runtime.gpu_layers encoding");
+                } else {
+                    result.config.server.gpuLayers =
+                        *wide;
+                }
+            }
+
+        } else if (
+            key ==
+            "runtime.startup_timeout_ms") {
+
+            std::uint32_t timeout{};
+
+            if (!ParseUnsigned<std::uint32_t>(
+                    value,
+                    1000,
+                    600000,
+                    timeout)) {
+                Issue(
+                    result,
+                    lineNumber,
+                    "invalid runtime.startup_timeout_ms");
+            } else {
+                result.config.server.startupTimeoutMs =
+                    timeout;
             }
 
         } else if (key == "chat.max_turns") {
