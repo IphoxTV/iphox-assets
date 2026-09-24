@@ -1301,6 +1301,59 @@ void TestPortableRuntimePathsAndAutostartConfig() {
     assert(!host.IsRunning());
 }
 
+
+void TestChatClearResetsCoreConversation() {
+    ContextCaptureEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        16
+    };
+
+    iphox::ipc::Frame first;
+    first.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    first.header.requestId = 1400;
+    first.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "before-clear"});
+
+    (void)service.Handle(first);
+
+    iphox::ipc::Frame clear;
+    clear.header.type =
+        iphox::ipc::MessageType::ChatClear;
+    clear.header.requestId = 1401;
+
+    const auto clearResult =
+        service.Handle(clear);
+
+    assert(
+        clearResult.response.header.type ==
+        iphox::ipc::MessageType::ChatClear);
+
+    iphox::ipc::Frame after;
+    after.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    after.header.requestId = 1402;
+    after.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "after-clear"});
+
+    (void)service.Handle(after);
+
+    assert(engine.last.messages.size() == 2);
+    assert(
+        engine.last.messages[0].role ==
+        iphox::generation::GenerationRole::System);
+    assert(
+        engine.last.messages[1].text ==
+        "after-clear");
+}
+
 } // namespace
 
 int main() {
@@ -1335,6 +1388,7 @@ int main() {
     TestDuplicateChatDoesNotDuplicateHistory();
     TestLlamaCppWireUsesTypedRoles();
     TestPortableRuntimePathsAndAutostartConfig();
+    TestChatClearResetsCoreConversation();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
