@@ -1,6 +1,7 @@
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
 
 #include "iphox/foundation/JsonLite.hpp"
+#include "iphox/generation/LlamaCppWire.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -95,21 +96,6 @@ std::string StatusCodeError(
 
     return "LLAMA_HTTP_" +
         std::to_string(status);
-}
-
-const char* RoleName(
-    GenerationRole role) noexcept {
-
-    switch (role) {
-    case GenerationRole::System:
-        return "system";
-    case GenerationRole::User:
-        return "user";
-    case GenerationRole::Assistant:
-        return "assistant";
-    }
-
-    return "user";
 }
 
 bool ReadBody(
@@ -414,43 +400,17 @@ GenerationResult LlamaCppHttpEngine::Generate(
             "LLAMA_REQUEST_OPEN_FAILED");
     }
 
-    if (request.messages.empty()) {
+    const auto body =
+        LlamaCppWire::BuildChatRequest(
+            request,
+            config_.nPredict);
+
+    if (!body.has_value()) {
         return Failed(
-            "EMPTY_GENERATION_REQUEST");
+            "INVALID_GENERATION_REQUEST");
     }
 
-    std::string body =
-        "{\"messages\":[";
-
-    bool first = true;
-
-    for (const auto& message :
-         request.messages) {
-
-        if (!first) {
-            body += ",";
-        }
-
-        first = false;
-
-        body +=
-            "{\"role\":\"" +
-            std::string{
-                RoleName(message.role)
-            } +
-            "\",\"content\":\"" +
-            foundation::JsonEscape(
-                message.text) +
-            "\"}";
-    }
-
-    body +=
-        "],\"max_tokens\":" +
-        std::to_string(
-            config_.nPredict) +
-        ",\"stream\":false}";
-
-    if (body.size() >
+    if (body->size() >
         (std::numeric_limits<DWORD>::max)()) {
         return Failed(
             "LLAMA_REQUEST_TOO_LARGE");
@@ -468,9 +428,9 @@ GenerationResult LlamaCppHttpEngine::Generate(
             httpRequest.Get(),
             kHeaders,
             static_cast<DWORD>(-1L),
-            const_cast<char*>(body.data()),
-            static_cast<DWORD>(body.size()),
-            static_cast<DWORD>(body.size()),
+            const_cast<char*>(body->data()),
+            static_cast<DWORD>(body->size()),
+            static_cast<DWORD>(body->size()),
             0)) {
         return Unavailable(
             "LLAMA_SEND_FAILED");
@@ -526,9 +486,8 @@ GenerationResult LlamaCppHttpEngine::Generate(
     }
 
     const auto content =
-        foundation::JsonStringField(
-            responseBody,
-            "content");
+        LlamaCppWire::ParseChatContent(
+            responseBody);
 
     if (!content.has_value()) {
         return Failed(
