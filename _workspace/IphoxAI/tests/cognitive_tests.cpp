@@ -19,6 +19,8 @@
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
 #include "iphox/runtime/RuntimeConfig.hpp"
+#include "iphox/runtime/LlamaServerProcessHost.hpp"
+#include "iphox/runtime/Paths.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -1242,6 +1244,63 @@ void TestLlamaCppWireUsesTypedRoles() {
     assert(*parsed == "ciao");
 }
 
+
+void TestPortableRuntimePathsAndAutostartConfig() {
+    const auto parsed =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "runtime.autostart=true\n"
+            "runtime.server_path=runtime\\\\llama-server.exe\n"
+            "runtime.model_path=models\\\\qwen.gguf\n"
+            "runtime.ctx_size=16384\n"
+            "runtime.gpu_layers=all\n"
+            "runtime.startup_timeout_ms=45000\n");
+
+    assert(parsed.valid);
+    assert(parsed.config.server.autostart);
+    assert(
+        parsed.config.server.contextSize ==
+        16384);
+    assert(
+        parsed.config.server.gpuLayers ==
+        L"all");
+    assert(
+        parsed.config.server.startupTimeoutMs ==
+        45000);
+
+    const std::filesystem::path root{
+        L"C:\\Portable\\IphoxAI"
+    };
+
+    const auto server =
+        iphox::runtime::ResolvePortablePath(
+            root,
+            parsed.config.server.serverPath);
+
+    assert(
+        server ==
+        std::filesystem::path{
+            L"C:\\Portable\\IphoxAI\\runtime\\llama-server.exe"
+        }.lexically_normal());
+
+    const auto bad =
+        iphox::runtime::RuntimeConfigLoader::Parse(
+            "runtime.autostart=maybe\n"
+            "runtime.gpu_layers=banana\n");
+
+    assert(!bad.valid);
+
+    iphox::runtime::LlamaServerProcessHost host;
+
+    iphox::runtime::LlamaServerLaunchConfig invalid;
+    invalid.serverPath =
+        L"Z:\\does-not-exist\\llama-server.exe";
+    invalid.modelPath =
+        L"Z:\\does-not-exist\\model.gguf";
+
+    assert(!host.Start(invalid));
+    assert(!host.IsRunning());
+}
+
 } // namespace
 
 int main() {
@@ -1275,6 +1334,7 @@ int main() {
     TestCoreServiceCarriesConversationContext();
     TestDuplicateChatDoesNotDuplicateHistory();
     TestLlamaCppWireUsesTypedRoles();
+    TestPortableRuntimePathsAndAutostartConfig();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
