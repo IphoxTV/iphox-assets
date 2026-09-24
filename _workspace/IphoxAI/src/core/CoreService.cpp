@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace iphox::core {
@@ -35,9 +36,16 @@ void AppendLe(
 CoreService::CoreService(
     generation::IGenerativeEngine& engine,
     cognitive::Supervisor& supervisor,
-    std::size_t requestCapacity)
+    std::size_t requestCapacity,
+    std::size_t maxConversationTurns,
+    std::size_t maxConversationBytes,
+    std::string systemPrompt)
     : engine_(engine),
       supervisor_(supervisor),
+      conversation_(
+          maxConversationTurns,
+          maxConversationBytes,
+          std::move(systemPrompt)),
       requests_(requestCapacity) {}
 
 HandleResult CoreService::Handle(
