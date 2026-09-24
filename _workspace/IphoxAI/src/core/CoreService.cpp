@@ -202,15 +202,21 @@ HandleResult CoreService::Handle(
             break;
         }
 
+        const auto generationRequest =
+            conversation_.BuildRequest(
+                chat.value.text);
+
         const auto generationResult =
             engine_.Generate(
-                {
-                    .prompt = chat.value.text
-                },
+                generationRequest,
                 stopToken);
 
         switch (generationResult.status) {
         case generation::GenerationStatus::Completed:
+            conversation_.AddTurn(
+                chat.value.text,
+                generationResult.text);
+
             result.response =
                 MakeResponse(
                     request,
