@@ -23,7 +23,13 @@ public:
     CoreService(
         generation::IGenerativeEngine& engine,
         cognitive::Supervisor& supervisor,
-        std::size_t requestCapacity = 1024);
+        std::size_t requestCapacity = 1024,
+        std::size_t maxConversationTurns = 24,
+        std::size_t maxConversationBytes = 64u * 1024u,
+        std::string systemPrompt =
+            "You are IphoxAI, a local native AI assistant. "
+            "Answer the latest user message directly and keep continuity "
+            "with the available conversation history.");
 
     [[nodiscard]] HandleResult Handle(
         const ipc::Frame& request,
