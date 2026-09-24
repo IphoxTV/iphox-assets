@@ -28,6 +28,7 @@ add_library(iphox_core STATIC
     src/ipc/SecurePipeServer.cpp
     src/runtime/CoreProcessHost.cpp
     src/runtime/CoreRpcClient.cpp
+    src/runtime/FileLogger.cpp
     src/runtime/LlamaServerProcessHost.cpp
     src/runtime/Paths.cpp
     src/runtime/RuntimeConfig.cpp
