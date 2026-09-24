@@ -144,6 +144,43 @@ HandleResult CoreService::Handle(
                 ipc::MessageType::Pong);
         break;
 
+    case ipc::MessageType::RuntimeStatus: {
+        const auto probe =
+            engine_.Probe(stopToken);
+
+        result.response =
+            MakeResponse(
+                request,
+                ipc::MessageType::RuntimeStatus);
+
+        std::string status;
+
+        switch (probe.status) {
+        case generation::EngineStatus::Ready:
+            status = "READY";
+            break;
+        case generation::EngineStatus::Loading:
+            status = "LOADING";
+            break;
+        case generation::EngineStatus::Unavailable:
+            status = "UNAVAILABLE";
+            break;
+        case generation::EngineStatus::Failed:
+            status = "FAILED";
+            break;
+        }
+
+        if (!probe.detail.empty()) {
+            status += ":";
+            status += probe.detail;
+        }
+
+        result.response.payload =
+            ipc::ToPayload(status);
+        break;
+    }
+
+
     case ipc::MessageType::ChatSubmit: {
         const auto chat =
             chat::ChatCodec::Decode(
