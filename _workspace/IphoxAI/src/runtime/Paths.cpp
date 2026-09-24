@@ -41,4 +41,19 @@ std::filesystem::path ExecutableDirectory() {
     return executable.parent_path();
 }
 
+std::filesystem::path ResolvePortablePath(
+    const std::filesystem::path& root,
+    const std::filesystem::path& configured) {
+
+    if (configured.empty()) {
+        return {};
+    }
+
+    if (configured.is_absolute()) {
+        return configured.lexically_normal();
+    }
+
+    return (root / configured).lexically_normal();
+}
+
 } // namespace iphox::runtime
