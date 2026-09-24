@@ -13,6 +13,7 @@
 #include "iphox/foundation/TextEncoding.hpp"
 #include "iphox/foundation/JsonLite.hpp"
 #include "iphox/generation/LlamaCppHttpEngine.hpp"
+#include "iphox/generation/LlamaCppWire.hpp"
 #include "iphox/generation/UnavailableGenerativeEngine.hpp"
 #include "iphox/ipc/Payload.hpp"
 #include "iphox/ipc/Protocol.hpp"
@@ -1169,6 +1170,58 @@ void TestDuplicateChatDoesNotDuplicateHistory() {
     assert(engine.last.messages[3].text == "next");
 }
 
+
+void TestLlamaCppWireUsesTypedRoles() {
+    iphox::generation::GenerationRequest request;
+
+    request.messages = {
+        {
+            .role = iphox::generation::GenerationRole::System,
+            .text = "system"
+        },
+        {
+            .role = iphox::generation::GenerationRole::User,
+            .text = "hello"
+        },
+        {
+            .role = iphox::generation::GenerationRole::Assistant,
+            .text = "world"
+        }
+    };
+
+    const auto body =
+        iphox::generation::LlamaCppWire::BuildChatRequest(
+            request,
+            512);
+
+    assert(body.has_value());
+
+    assert(
+        body->find("\"role\":\"system\"") !=
+        std::string::npos);
+
+    assert(
+        body->find("\"role\":\"user\"") !=
+        std::string::npos);
+
+    assert(
+        body->find("\"role\":\"assistant\"") !=
+        std::string::npos);
+
+    assert(
+        body->find("\"max_tokens\":512") !=
+        std::string::npos);
+
+    const auto parsed =
+        iphox::generation::LlamaCppWire::ParseChatContent(
+            "{\"choices\":[{\"message\":"
+            "{\"role\":\"assistant\","
+            "\"content\":\"ciao\"}}]}");
+
+    assert(parsed.has_value());
+    assert(*parsed == "ciao");
+}
+
 } // namespace
 
 int main() {
@@ -1201,6 +1254,7 @@ int main() {
     TestConversationHistoryIsBoundedAndOrdered();
     TestCoreServiceCarriesConversationContext();
     TestDuplicateChatDoesNotDuplicateHistory();
+    TestLlamaCppWireUsesTypedRoles();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
