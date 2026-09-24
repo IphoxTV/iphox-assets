@@ -6,16 +6,16 @@
 #include <cassert>
 #include <iostream>
 
-int wmain() {
-    iphox::runtime::CoreProcessHost core;
+namespace {
 
-    assert(core.StartSiblingCore());
-    assert(core.IsRunning());
+void VerifyHelloAndPing(
+    std::uint64_t baseRequestId) {
 
     iphox::ipc::Frame hello;
     hello.header.type =
         iphox::ipc::MessageType::Hello;
-    hello.header.requestId = 1000;
+    hello.header.requestId =
+        baseRequestId;
 
     const auto helloAck =
         iphox::runtime::CoreRpcClient::Request(
@@ -23,7 +23,6 @@ int wmain() {
             5000);
 
     assert(helloAck.has_value());
-
     assert(
         helloAck->header.type ==
         iphox::ipc::MessageType::Hello);
@@ -36,7 +35,8 @@ int wmain() {
     iphox::ipc::Frame ping;
     ping.header.type =
         iphox::ipc::MessageType::Ping;
-    ping.header.requestId = 1001;
+    ping.header.requestId =
+        baseRequestId + 1;
 
     const auto pong =
         iphox::runtime::CoreRpcClient::Request(
@@ -51,16 +51,21 @@ int wmain() {
 
     assert(
         pong->header.requestId ==
-        1001);
+        baseRequestId + 1);
 
     assert(
         (pong->header.flags &
             iphox::ipc::kFlagResponse) != 0);
+}
+
+void ShutdownCore(
+    std::uint64_t requestId) {
 
     iphox::ipc::Frame shutdown;
     shutdown.header.type =
         iphox::ipc::MessageType::CoreShutdown;
-    shutdown.header.requestId = 1002;
+    shutdown.header.requestId =
+        requestId;
 
     const auto ack =
         iphox::runtime::CoreRpcClient::Request(
@@ -75,11 +80,37 @@ int wmain() {
 
     assert(
         ack->header.requestId ==
-        1002);
+        requestId);
 
     assert(
         (ack->header.flags &
             iphox::ipc::kFlagResponse) != 0);
+}
+
+} // namespace
+
+int wmain() {
+    iphox::runtime::CoreProcessHost core;
+
+    // First lifecycle.
+    assert(core.StartSiblingCore());
+    assert(core.IsRunning());
+
+    VerifyHelloAndPing(1000);
+    ShutdownCore(1002);
+
+    assert(core.WaitForExit(3000));
+    assert(!core.IsRunning());
+
+    core.Close();
+
+    // Recovery lifecycle: the exact same process host must be
+    // reusable after a Core exit, matching the UI auto-restart path.
+    assert(core.StartSiblingCore());
+    assert(core.IsRunning());
+
+    VerifyHelloAndPing(2000);
+    ShutdownCore(2002);
 
     assert(core.WaitForExit(3000));
     assert(!core.IsRunning());
@@ -87,7 +118,7 @@ int wmain() {
     core.Close();
 
     std::cout
-        << "IphoxCore transient RPC smoke: PASS\n";
+        << "IphoxCore transient RPC + restart smoke: PASS\n";
 
     return 0;
 }
