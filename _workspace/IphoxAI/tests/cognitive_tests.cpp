@@ -19,6 +19,7 @@
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/rpc/RpcAuthority.hpp"
 #include "iphox/runtime/RuntimeConfig.hpp"
+#include "iphox/runtime/SingleInstanceGuard.hpp"
 #include "iphox/runtime/FileLogger.hpp"
 #include "iphox/runtime/LlamaServerProcessHost.hpp"
 #include "iphox/runtime/Paths.hpp"
@@ -1405,6 +1406,32 @@ void TestFileLoggerIsBoundedAndRotates() {
         ec);
 }
 
+
+void TestSingleInstanceGuard() {
+    const std::wstring name =
+        L"Local\\IphoxAI.Native.R0.TestGuard";
+
+    {
+        iphox::runtime::SingleInstanceGuard first{
+            name
+        };
+
+        assert(first.Acquired());
+
+        iphox::runtime::SingleInstanceGuard second{
+            name
+        };
+
+        assert(!second.Acquired());
+    }
+
+    iphox::runtime::SingleInstanceGuard third{
+        name
+    };
+
+    assert(third.Acquired());
+}
+
 } // namespace
 
 int main() {
@@ -1441,6 +1468,7 @@ int main() {
     TestPortableRuntimePathsAndAutostartConfig();
     TestChatClearResetsCoreConversation();
     TestFileLoggerIsBoundedAndRotates();
+    TestSingleInstanceGuard();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
