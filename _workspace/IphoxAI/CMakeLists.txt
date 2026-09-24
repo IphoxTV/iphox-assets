@@ -32,6 +32,7 @@ add_library(iphox_core STATIC
     src/runtime/LlamaServerProcessHost.cpp
     src/runtime/Paths.cpp
     src/runtime/RuntimeConfig.cpp
+    src/runtime/SingleInstanceGuard.cpp
 )
 
 target_include_directories(iphox_core PUBLIC include)
