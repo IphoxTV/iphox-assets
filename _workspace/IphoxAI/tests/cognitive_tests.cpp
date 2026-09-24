@@ -1,5 +1,6 @@
 #include "iphox/capability/CapabilityAuthority.hpp"
 #include "iphox/chat/ChatCodec.hpp"
+#include "iphox/chat/ConversationHistory.hpp"
 #include "iphox/cognitive/BaselineDecisionBackend.hpp"
 #include "iphox/cognitive/DecisionCodec.hpp"
 #include "iphox/cognitive/DecisionValidator.hpp"
@@ -796,9 +797,17 @@ public:
             };
         }
 
+        if (request.messages.empty()) {
+            return {
+                .status = iphox::generation::GenerationStatus::Failed,
+                .text = {},
+                .errorCode = "EMPTY"
+            };
+        }
+
         return {
             .status = iphox::generation::GenerationStatus::Completed,
-            .text = "echo:" + request.prompt,
+            .text = "echo:" + request.messages.back().text,
             .errorCode = {}
         };
     }
@@ -995,6 +1004,112 @@ void TestCoreServiceRuntimeStatus() {
         "READY:mock-ready");
 }
 
+
+void TestConversationHistoryIsBoundedAndOrdered() {
+    iphox::chat::ConversationHistory history{
+        2,
+        1024,
+        "system"
+    };
+
+    history.AddTurn("u1", "a1");
+    history.AddTurn("u2", "a2");
+    history.AddTurn("u3", "a3");
+
+    assert(history.Size() == 2);
+
+    const auto request =
+        history.BuildRequest("u4");
+
+    assert(request.messages.size() == 6);
+
+    assert(
+        request.messages[0].role ==
+        iphox::generation::GenerationRole::System);
+
+    assert(request.messages[1].text == "u2");
+    assert(request.messages[2].text == "a2");
+    assert(request.messages[3].text == "u3");
+    assert(request.messages[4].text == "a3");
+    assert(request.messages[5].text == "u4");
+}
+
+class ContextCaptureEngine final
+    : public iphox::generation::IGenerativeEngine {
+
+public:
+    iphox::generation::EngineProbeResult Probe(
+        std::stop_token) override {
+
+        return {
+            .status = iphox::generation::EngineStatus::Ready,
+            .detail = "capture"
+        };
+    }
+
+    iphox::generation::GenerationResult Generate(
+        const iphox::generation::GenerationRequest& request,
+        std::stop_token) override {
+
+        last = request;
+
+        return {
+            .status = iphox::generation::GenerationStatus::Completed,
+            .text = "ok",
+            .errorCode = {}
+        };
+    }
+
+    iphox::generation::GenerationRequest last;
+};
+
+void TestCoreServiceCarriesConversationContext() {
+    ContextCaptureEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        16
+    };
+
+    iphox::ipc::Frame first;
+    first.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    first.header.requestId = 1200;
+    first.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "first"});
+
+    const auto firstResult =
+        service.Handle(first);
+
+    assert(
+        firstResult.response.header.type ==
+        iphox::ipc::MessageType::ChatStatus);
+
+    iphox::ipc::Frame second;
+    second.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    second.header.requestId = 1201;
+    second.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "second"});
+
+    const auto secondResult =
+        service.Handle(second);
+
+    assert(
+        secondResult.response.header.type ==
+        iphox::ipc::MessageType::ChatStatus);
+
+    assert(engine.last.messages.size() == 4);
+    assert(engine.last.messages[1].text == "first");
+    assert(engine.last.messages[2].text == "ok");
+    assert(engine.last.messages[3].text == "second");
+}
+
 } // namespace
 
 int main() {
@@ -1024,6 +1139,8 @@ int main() {
     TestRuntimeConfigDefaultsAndValidation();
     TestStrictTextEncodingRoundTrip();
     TestCoreServiceRuntimeStatus();
+    TestConversationHistoryIsBoundedAndOrdered();
+    TestCoreServiceCarriesConversationContext();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
