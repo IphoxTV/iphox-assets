@@ -40,6 +40,11 @@ constexpr UINT kTrayMessage =
 constexpr UINT kChatResultMessage =
     WM_APP + 43;
 
+constexpr UINT kRuntimeResultMessage =
+    WM_APP + 44;
+
+constexpr UINT_PTR kRuntimeTimerId = 2001;
+
 constexpr UINT kTrayId = 1;
 constexpr UINT kTrayOpen = 1001;
 constexpr UINT kTrayExit = 1002;
@@ -49,6 +54,10 @@ constexpr UINT kChatSend = 1102;
 struct ChatUiResult {
     std::uint64_t requestId{};
     bool ok{};
+    std::wstring text;
+};
+
+struct RuntimeUiResult {
     std::wstring text;
 };
 
@@ -348,6 +357,19 @@ private:
                 reinterpret_cast<ChatUiResult*>(
                     lParam));
             return 0;
+
+        case kRuntimeResultMessage:
+            HandleRuntimeResult(
+                reinterpret_cast<RuntimeUiResult*>(
+                    lParam));
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == kRuntimeTimerId) {
+                ProbeRuntimeAsync();
+                return 0;
+            }
+            break;
 
         case kTrayMessage:
             if (LOWORD(lParam) ==
@@ -837,54 +859,24 @@ private:
         }
 
         coreReady_ = true;
-
-        iphox::ipc::Frame runtimeStatus;
-        runtimeStatus.header.type =
-            iphox::ipc::MessageType::
-                RuntimeStatus;
-        runtimeStatus.header.requestId =
-            nextRequestId_++;
-
-        const auto runtime =
-            iphox::runtime::CoreRpcClient::
-                Request(
-                    runtimeStatus,
-                    5000);
-
-        std::wstring runtimeText =
-            L"llama.cpp: stato sconosciuto";
-
-        if (runtime.has_value() &&
-            runtime->header.type ==
-                iphox::ipc::MessageType::
-                    RuntimeStatus &&
-            (runtime->header.flags &
-                iphox::ipc::kFlagError) == 0) {
-
-            const auto utf8 =
-                iphox::ipc::FromPayload(
-                    runtime->payload);
-
-            const auto wide =
-                iphox::foundation::
-                    Utf8ToWide(utf8);
-
-            if (wide.has_value()) {
-                runtimeText =
-                    L"llama.cpp: " +
-                    *wide;
-            }
-        }
+        runtimeStatus_ =
+            L"llama.cpp: verifica in corso";
 
         coreStatus_ =
             L"IphoxCore connesso · Native C++ · " +
-            runtimeText;
+            runtimeStatus_;
 
         AppendTranscript(
             L"Sistema",
-            L"Core connesso. " +
-            runtimeText +
-            L".");
+            L"Core connesso.");
+
+        SetTimer(
+            hwnd_,
+            kRuntimeTimerId,
+            5000,
+            nullptr);
+
+        ProbeRuntimeAsync();
 
         UpdateChatControls();
 
@@ -894,6 +886,124 @@ private:
             FALSE);
 
         SetFocus(input_);
+    }
+
+    void ProbeRuntimeAsync() {
+        if (!coreReady_ ||
+            chatBusy_.load() ||
+            runtimeProbeBusy_.load() ||
+            shuttingDown_.load()) {
+            return;
+        }
+
+        if (runtimeThread_.joinable()) {
+            runtimeThread_.join();
+        }
+
+        runtimeProbeBusy_.store(true);
+
+        const auto requestId =
+            nextRequestId_++;
+
+        runtimeThread_ =
+            std::thread(
+                [this, requestId] {
+                    auto result =
+                        std::make_unique<
+                            RuntimeUiResult>();
+
+                    iphox::ipc::Frame frame;
+                    frame.header.type =
+                        iphox::ipc::MessageType::
+                            RuntimeStatus;
+                    frame.header.requestId =
+                        requestId;
+
+                    const auto response =
+                        iphox::runtime::
+                            CoreRpcClient::Request(
+                                frame,
+                                1500);
+
+                    if (!response.has_value()) {
+                        result->text =
+                            L"llama.cpp: non raggiungibile";
+                    } else if (
+                        response->header.type ==
+                            iphox::ipc::MessageType::
+                                RuntimeStatus &&
+                        (response->header.flags &
+                            iphox::ipc::kFlagError) == 0) {
+
+                        const auto utf8 =
+                            iphox::ipc::FromPayload(
+                                response->payload);
+
+                        const auto wide =
+                            iphox::foundation::
+                                Utf8ToWide(
+                                    utf8);
+
+                        result->text =
+                            wide.has_value()
+                            ? L"llama.cpp: " + *wide
+                            : L"llama.cpp: stato non valido";
+                    } else {
+                        result->text =
+                            L"llama.cpp: probe fallita";
+                    }
+
+                    if (shuttingDown_.load()) {
+                        return;
+                    }
+
+                    auto* raw =
+                        result.release();
+
+                    if (!PostMessageW(
+                            hwnd_,
+                            kRuntimeResultMessage,
+                            0,
+                            reinterpret_cast<LPARAM>(
+                                raw))) {
+                        delete raw;
+                    }
+                });
+    }
+
+    void HandleRuntimeResult(
+        RuntimeUiResult* rawResult) {
+
+        std::unique_ptr<RuntimeUiResult>
+            result{rawResult};
+
+        runtimeProbeBusy_.store(false);
+
+        if (!result ||
+            shuttingDown_.load()) {
+            return;
+        }
+
+        const bool changed =
+            runtimeStatus_ != result->text;
+
+        runtimeStatus_ =
+            result->text;
+
+        coreStatus_ =
+            L"IphoxCore connesso · Native C++ · " +
+            runtimeStatus_;
+
+        if (changed) {
+            AppendTranscript(
+                L"Sistema",
+                runtimeStatus_);
+        }
+
+        InvalidateRect(
+            hwnd_,
+            nullptr,
+            FALSE);
     }
 
     void SubmitChat() {
@@ -1286,6 +1396,13 @@ private:
 
         coreShutdown_ = true;
         shuttingDown_.store(true);
+
+        if (hwnd_ != nullptr) {
+            KillTimer(
+                hwnd_,
+                kRuntimeTimerId);
+        }
+
         UpdateChatControls();
 
         if (coreReady_ &&
@@ -1316,7 +1433,12 @@ private:
             chatThread_.join();
         }
 
+        if (runtimeThread_.joinable()) {
+            runtimeThread_.join();
+        }
+
         chatBusy_.store(false);
+        runtimeProbeBusy_.store(false);
         coreReady_ = false;
     }
 
@@ -1467,15 +1589,21 @@ private:
         coreProcess_;
 
     std::thread chatThread_;
+    std::thread runtimeThread_;
 
     std::wstring coreStatus_{
         L"IphoxCore non inizializzato"
+    };
+
+    std::wstring runtimeStatus_{
+        L"llama.cpp: non verificato"
     };
 
     std::uint64_t nextRequestId_{1};
     std::uint64_t activeChatRequestId_{};
 
     std::atomic_bool chatBusy_{false};
+    std::atomic_bool runtimeProbeBusy_{false};
     std::atomic_bool shuttingDown_{false};
 
     bool coreReady_{};
