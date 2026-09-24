@@ -61,6 +61,7 @@ struct ChatUiResult {
 
 struct RuntimeUiResult {
     std::wstring text;
+    bool coreReachable{};
 };
 
 class NativeWindow final {
@@ -936,7 +937,8 @@ private:
 
                     if (!response.has_value()) {
                         result->text =
-                            L"llama.cpp: non raggiungibile";
+                            L"IphoxCore: non raggiungibile";
+                        result->coreReachable = false;
                     } else if (
                         response->header.type ==
                             iphox::ipc::MessageType::
@@ -953,11 +955,13 @@ private:
                                 Utf8ToWide(
                                     utf8);
 
+                        result->coreReachable = true;
                         result->text =
                             wide.has_value()
                             ? L"llama.cpp: " + *wide
                             : L"llama.cpp: stato non valido";
                     } else {
+                        result->coreReachable = true;
                         result->text =
                             L"llama.cpp: probe fallita";
                     }
@@ -993,6 +997,31 @@ private:
             return;
         }
 
+        if (!result->coreReachable) {
+            runtimeStatus_ =
+                result->text;
+
+            coreStatus_ =
+                runtimeStatus_;
+
+            InvalidateRect(
+                hwnd_,
+                nullptr,
+                FALSE);
+
+            if (!chatBusy_.load() &&
+                !coreProcess_.IsRunning()) {
+
+                AppendTranscript(
+                    L"Sistema",
+                    L"IphoxCore terminato. Riavvio automatico.");
+
+                RestartCoreAfterFailure();
+            }
+
+            return;
+        }
+
         const bool changed =
             runtimeStatus_ != result->text;
 
@@ -1013,6 +1042,31 @@ private:
             hwnd_,
             nullptr,
             FALSE);
+    }
+
+    void RestartCoreAfterFailure() {
+        if (shuttingDown_.load() ||
+            chatBusy_.load()) {
+            return;
+        }
+
+        coreReady_ = false;
+        coreProcess_.Close();
+
+        runtimeStatus_ =
+            L"llama.cpp: non verificato";
+
+        coreStatus_ =
+            L"Riavvio IphoxCore...";
+
+        UpdateChatControls();
+
+        InvalidateRect(
+            hwnd_,
+            nullptr,
+            FALSE);
+
+        StartCore();
     }
 
     void ClearConversation() {
