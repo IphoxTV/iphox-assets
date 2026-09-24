@@ -48,7 +48,10 @@ int wmain() {
     iphox::core::CoreService service{
         engine,
         supervisor,
-        1024
+        1024,
+        runtimeConfig.config.chat.maxTurns,
+        runtimeConfig.config.chat.maxBytes,
+        runtimeConfig.config.chat.systemPrompt
     };
 
     if (!lifecycle.MarkReady()) {
