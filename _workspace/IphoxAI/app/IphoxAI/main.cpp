@@ -8,6 +8,7 @@
 #include "iphox/ipc/Protocol.hpp"
 #include "iphox/runtime/CoreProcessHost.hpp"
 #include "iphox/runtime/CoreRpcClient.hpp"
+#include "iphox/runtime/SingleInstanceGuard.hpp"
 
 #include <windows.h>
 #include <shellapi.h>
@@ -1679,6 +1680,33 @@ int WINAPI wWinMain(
 
     SetProcessDpiAwarenessContext(
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    iphox::runtime::SingleInstanceGuard
+        instanceGuard{
+            L"Local\\IphoxAI.Native.R0.Instance"
+        };
+
+    if (!instanceGuard.Acquired()) {
+        const HWND existing =
+            FindWindowW(
+                kWindowClass,
+                kWindowTitle);
+
+        if (existing != nullptr) {
+            ShowWindow(
+                existing,
+                SW_SHOW);
+
+            ShowWindow(
+                existing,
+                SW_RESTORE);
+
+            SetForegroundWindow(
+                existing);
+        }
+
+        return 0;
+    }
 
     NativeWindow window;
 
