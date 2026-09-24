@@ -768,6 +768,22 @@ class EchoGenerativeEngine final
     : public iphox::generation::IGenerativeEngine {
 
 public:
+    iphox::generation::EngineProbeResult Probe(
+        std::stop_token stopToken) override {
+
+        if (stopToken.stop_requested()) {
+            return {
+                .status = iphox::generation::EngineStatus::Unavailable,
+                .detail = "CANCELLED"
+            };
+        }
+
+        return {
+            .status = iphox::generation::EngineStatus::Ready,
+            .detail = "mock-ready"
+        };
+    }
+
     iphox::generation::GenerationResult Generate(
         const iphox::generation::GenerationRequest& request,
         std::stop_token stopToken) override {
@@ -949,6 +965,36 @@ void TestStrictTextEncodingRoundTrip() {
             invalid).has_value());
 }
 
+
+void TestCoreServiceRuntimeStatus() {
+    EchoGenerativeEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        8
+    };
+
+    iphox::ipc::Frame status;
+    status.header.type =
+        iphox::ipc::MessageType::RuntimeStatus;
+    status.header.requestId = 990;
+
+    const auto result =
+        service.Handle(status);
+
+    assert(
+        result.response.header.type ==
+        iphox::ipc::MessageType::RuntimeStatus);
+
+    assert(
+        iphox::ipc::FromPayload(
+            result.response.payload) ==
+        "READY:mock-ready");
+}
+
 } // namespace
 
 int main() {
@@ -977,6 +1023,7 @@ int main() {
     TestCoreServiceCompletedChatPath();
     TestRuntimeConfigDefaultsAndValidation();
     TestStrictTextEncodingRoundTrip();
+    TestCoreServiceRuntimeStatus();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
