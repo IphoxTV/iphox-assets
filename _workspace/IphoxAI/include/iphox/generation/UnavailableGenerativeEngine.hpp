@@ -8,6 +8,9 @@ class UnavailableGenerativeEngine final
     : public IGenerativeEngine {
 
 public:
+    [[nodiscard]] EngineProbeResult Probe(
+        std::stop_token stopToken) override;
+
     [[nodiscard]] GenerationResult Generate(
         const GenerationRequest& request,
         std::stop_token stopToken) override;
