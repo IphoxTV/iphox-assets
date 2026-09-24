@@ -156,6 +156,168 @@ LlamaCppHttpEngine::LlamaCppHttpEngine(
     LlamaCppHttpConfig config)
     : config_(std::move(config)) {}
 
+EngineProbeResult LlamaCppHttpEngine::Probe(
+    std::stop_token stopToken) {
+
+    if (stopToken.stop_requested()) {
+        return {
+            .status = EngineStatus::Unavailable,
+            .detail = "CANCELLED"
+        };
+    }
+
+    if (!IsLoopbackHost(config_.host) ||
+        config_.port == 0) {
+        return {
+            .status = EngineStatus::Failed,
+            .detail = "INVALID_LLAMA_CONFIG"
+        };
+    }
+
+    InternetHandle session{
+        WinHttpOpen(
+            L"IphoxAI-Native/0.1",
+            WINHTTP_ACCESS_TYPE_NO_PROXY,
+            WINHTTP_NO_PROXY_NAME,
+            WINHTTP_NO_PROXY_BYPASS,
+            0)
+    };
+
+    if (!session) {
+        return {
+            .status = EngineStatus::Unavailable,
+            .detail = "WINHTTP_SESSION_FAILED"
+        };
+    }
+
+    if (!WinHttpSetTimeouts(
+            session.Get(),
+            config_.resolveTimeoutMs,
+            config_.connectTimeoutMs,
+            config_.sendTimeoutMs,
+            (std::min)(config_.receiveTimeoutMs, 5000))) {
+        return {
+            .status = EngineStatus::Failed,
+            .detail = "WINHTTP_TIMEOUT_CONFIG_FAILED"
+        };
+    }
+
+    InternetHandle connection{
+        WinHttpConnect(
+            session.Get(),
+            config_.host.c_str(),
+            config_.port,
+            0)
+    };
+
+    if (!connection) {
+        return {
+            .status = EngineStatus::Unavailable,
+            .detail = "LLAMA_CONNECT_FAILED"
+        };
+    }
+
+    static constexpr wchar_t kAcceptJson[] =
+        L"application/json";
+
+    const wchar_t* acceptTypes[] = {
+        kAcceptJson,
+        nullptr
+    };
+
+    InternetHandle request{
+        WinHttpOpenRequest(
+            connection.Get(),
+            L"GET",
+            L"/health",
+            nullptr,
+            WINHTTP_NO_REFERER,
+            acceptTypes,
+            0)
+    };
+
+    if (!request) {
+        return {
+            .status = EngineStatus::Unavailable,
+            .detail = "LLAMA_HEALTH_OPEN_FAILED"
+        };
+    }
+
+    if (!WinHttpSendRequest(
+            request.Get(),
+            WINHTTP_NO_ADDITIONAL_HEADERS,
+            0,
+            WINHTTP_NO_REQUEST_DATA,
+            0,
+            0,
+            0) ||
+        !WinHttpReceiveResponse(
+            request.Get(),
+            nullptr)) {
+        return {
+            .status = EngineStatus::Unavailable,
+            .detail = "LLAMA_HEALTH_REQUEST_FAILED"
+        };
+    }
+
+    DWORD status{};
+    DWORD statusBytes = sizeof(status);
+
+    if (!WinHttpQueryHeaders(
+            request.Get(),
+            WINHTTP_QUERY_STATUS_CODE |
+                WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX,
+            &status,
+            &statusBytes,
+            WINHTTP_NO_HEADER_INDEX)) {
+        return {
+            .status = EngineStatus::Failed,
+            .detail = "LLAMA_HEALTH_STATUS_FAILED"
+        };
+    }
+
+    std::string body;
+
+    if (!ReadBody(
+            request.Get(),
+            body,
+            stopToken)) {
+        return {
+            .status = stopToken.stop_requested()
+                ? EngineStatus::Unavailable
+                : EngineStatus::Failed,
+            .detail = stopToken.stop_requested()
+                ? "CANCELLED"
+                : "LLAMA_HEALTH_READ_FAILED"
+        };
+    }
+
+    const auto detail =
+        foundation::JsonStringField(
+            body,
+            "status");
+
+    if (status == 200) {
+        return {
+            .status = EngineStatus::Ready,
+            .detail = detail.value_or("ok")
+        };
+    }
+
+    if (status == 503) {
+        return {
+            .status = EngineStatus::Loading,
+            .detail = detail.value_or("loading")
+        };
+    }
+
+    return {
+        .status = EngineStatus::Unavailable,
+        .detail = StatusCodeError(status)
+    };
+}
+
 GenerationResult LlamaCppHttpEngine::Generate(
     const GenerationRequest& request,
     std::stop_token stopToken) {
