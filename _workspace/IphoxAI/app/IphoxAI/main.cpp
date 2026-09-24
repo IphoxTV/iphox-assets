@@ -48,6 +48,7 @@ constexpr UINT_PTR kRuntimeTimerId = 2001;
 constexpr UINT kTrayId = 1;
 constexpr UINT kTrayOpen = 1001;
 constexpr UINT kTrayExit = 1002;
+constexpr UINT kTrayNewChat = 1003;
 constexpr UINT kChatInput = 1101;
 constexpr UINT kChatSend = 1102;
 
@@ -321,6 +322,13 @@ private:
 
                 ShutdownCore();
                 DestroyWindow(hwnd_);
+                return 0;
+            }
+
+            if (LOWORD(wParam) ==
+                kTrayNewChat) {
+
+                ClearConversation();
                 return 0;
             }
 
@@ -1006,6 +1014,50 @@ private:
             FALSE);
     }
 
+    void ClearConversation() {
+        if (!coreReady_ ||
+            chatBusy_.load() ||
+            shuttingDown_.load()) {
+            return;
+        }
+
+        iphox::ipc::Frame clear;
+        clear.header.type =
+            iphox::ipc::MessageType::
+                ChatClear;
+        clear.header.requestId =
+            nextRequestId_++;
+
+        const auto response =
+            iphox::runtime::CoreRpcClient::
+                Request(
+                    clear,
+                    1500);
+
+        if (!response.has_value() ||
+            response->header.type !=
+                iphox::ipc::MessageType::
+                    ChatClear ||
+            (response->header.flags &
+                iphox::ipc::kFlagError) != 0) {
+
+            AppendTranscript(
+                L"Sistema",
+                L"Impossibile azzerare il contesto.");
+            return;
+        }
+
+        SetWindowTextW(
+            transcript_,
+            L"");
+
+        AppendTranscript(
+            L"Sistema",
+            L"Nuova chat. Contesto Core azzerato.");
+
+        SetFocus(input_);
+    }
+
     void SubmitChat() {
         if (!coreReady_ ||
             chatBusy_.load() ||
@@ -1537,6 +1589,12 @@ private:
             MF_STRING,
             kTrayOpen,
             L"Apri IphoxAI");
+
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            kTrayNewChat,
+            L"Nuova chat");
 
         AppendMenuW(
             menu,
