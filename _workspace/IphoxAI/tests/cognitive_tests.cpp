@@ -1052,6 +1052,7 @@ public:
         std::stop_token) override {
 
         last = request;
+        ++calls;
 
         return {
             .status = iphox::generation::GenerationStatus::Completed,
@@ -1061,6 +1062,7 @@ public:
     }
 
     iphox::generation::GenerationRequest last;
+    int calls{};
 };
 
 void TestCoreServiceCarriesConversationContext() {
@@ -1110,6 +1112,63 @@ void TestCoreServiceCarriesConversationContext() {
     assert(engine.last.messages[3].text == "second");
 }
 
+
+void TestDuplicateChatDoesNotDuplicateHistory() {
+    ContextCaptureEngine engine;
+    BaselineDecisionBackend decisions;
+    Supervisor supervisor{decisions};
+
+    iphox::core::CoreService service{
+        engine,
+        supervisor,
+        16
+    };
+
+    iphox::ipc::Frame first;
+    first.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    first.header.requestId = 1300;
+    first.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "hello"});
+
+    const auto firstResult =
+        service.Handle(first);
+
+    const auto duplicateResult =
+        service.Handle(first);
+
+    assert(engine.calls == 1);
+
+    assert(
+        iphox::ipc::Protocol::Encode(
+            firstResult.response) ==
+        iphox::ipc::Protocol::Encode(
+            duplicateResult.response));
+
+    iphox::ipc::Frame second;
+    second.header.type =
+        iphox::ipc::MessageType::ChatSubmit;
+    second.header.requestId = 1301;
+    second.payload =
+        iphox::chat::ChatCodec::Encode(
+            {.text = "next"});
+
+    const auto secondResult =
+        service.Handle(second);
+
+    assert(
+        secondResult.response.header.type ==
+        iphox::ipc::MessageType::ChatStatus);
+
+    assert(engine.calls == 2);
+
+    assert(engine.last.messages.size() == 4);
+    assert(engine.last.messages[1].text == "hello");
+    assert(engine.last.messages[2].text == "ok");
+    assert(engine.last.messages[3].text == "next");
+}
+
 } // namespace
 
 int main() {
@@ -1141,6 +1200,7 @@ int main() {
     TestCoreServiceRuntimeStatus();
     TestConversationHistoryIsBoundedAndOrdered();
     TestCoreServiceCarriesConversationContext();
+    TestDuplicateChatDoesNotDuplicateHistory();
 
     std::cout
         << "IphoxAI native core baseline tests: PASS\n";
