@@ -838,14 +838,53 @@ private:
 
         coreReady_ = true;
 
+        iphox::ipc::Frame runtimeStatus;
+        runtimeStatus.header.type =
+            iphox::ipc::MessageType::
+                RuntimeStatus;
+        runtimeStatus.header.requestId =
+            nextRequestId_++;
+
+        const auto runtime =
+            iphox::runtime::CoreRpcClient::
+                Request(
+                    runtimeStatus,
+                    5000);
+
+        std::wstring runtimeText =
+            L"llama.cpp: stato sconosciuto";
+
+        if (runtime.has_value() &&
+            runtime->header.type ==
+                iphox::ipc::MessageType::
+                    RuntimeStatus &&
+            (runtime->header.flags &
+                iphox::ipc::kFlagError) == 0) {
+
+            const auto utf8 =
+                iphox::ipc::FromPayload(
+                    runtime->payload);
+
+            const auto wide =
+                iphox::foundation::
+                    Utf8ToWide(utf8);
+
+            if (wide.has_value()) {
+                runtimeText =
+                    L"llama.cpp: " +
+                    *wide;
+            }
+        }
+
         coreStatus_ =
-            L"IphoxCore connesso · "
-            L"Native C++ · llama.cpp locale";
+            L"IphoxCore connesso · Native C++ · " +
+            runtimeText;
 
         AppendTranscript(
             L"Sistema",
-            L"Core connesso. "
-            L"La chat è pronta.");
+            L"Core connesso. " +
+            runtimeText +
+            L".");
 
         UpdateChatControls();
 
